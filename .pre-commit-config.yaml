@@ -1,0 +1,39 @@
+default_language_version:
+  python: python3
+
+exclude: |
+  (?x)^(
+    alembic/|
+    _grpc.py|
+    _pb2.py|
+    tests/conftest.py
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.2.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        args: [--allow-multiple-documents,]
+      - id: double-quote-string-fixer
+      - id: fix-byte-order-marker
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/ambv/black
+    rev: 22.3.0
+    hooks:
+      - id: black
+        args: [--line-length=79, --skip-string-normalization]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 4.0.1
+    hooks:
+      - id: flake8
+        args: ['--ignore=E402,E722,W503,E203']
