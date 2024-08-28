@@ -5,6 +5,7 @@ from tkinter import colorchooser, simpledialog
 from PIL import Image, ImageTk
 import asyncio
 import threading
+from collections import deque
 from tkinter import messagebox
 from websocket_listener import listen_to_stream
 
@@ -30,6 +31,11 @@ class CryptoAlertWindow:
         ]
         self.font_size = 10
         self.bg_color = 'black'
+        self.history_len = 100
+        self.history_price = {
+            'BTCUSDT': deque(maxlen=self.history_len),
+            'ETHUSDT': deque(maxlen=self.history_len),
+        }
 
         self.setup_ui()
         self.asyncio_thread = None
@@ -120,6 +126,27 @@ class CryptoAlertWindow:
             self.proxy_url = new_proxy
             self.restart_websockets()
             self.show_info_message('proxy', 'connect to proxy sucessfully')
+
+    def change_history(self):
+        new_history_len = simpledialog.askstring(
+            'Set Memory Len',
+            'Enter new Memory Len:',
+            initialvalue=self.history_len,
+        )
+        if new_history_len:
+            try:
+                self.history_len = int(new_history_len)
+                self.history_price = {
+                    'BTCUSDT': deque(maxlen=self.history_len),
+                    'ETHUSDT': deque(maxlen=self.history_len),
+                }
+                self.show_info_message(
+                    'history_len', 'history_len update sucessfully'
+                )
+            except:
+                self.show_info_message(
+                    'history_len', 'history_len update failed'
+                )
 
     def change_stream(self, event=None):
         self.streams = [
@@ -256,6 +283,12 @@ class CryptoAlertWindow:
             scrollable_frame, text='Set Proxy', command=self.change_proxy
         )
         proxy_button.pack(pady=10, padx=10, anchor='w')
+        history_button = tk.Button(
+            scrollable_frame,
+            text='Set Memory Len',
+            command=self.change_history,
+        )
+        history_button.pack(pady=10, padx=10, anchor='w')
 
         # Stream 下拉菜单
         stream_label = tk.Label(

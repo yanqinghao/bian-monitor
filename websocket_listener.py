@@ -2,10 +2,6 @@ import aiohttp
 import asyncio
 import json
 from utils import format_timestamp, play_alert_sound
-from collections import deque
-
-# 创建一个最大长度为 5 的队列
-history_price = {'BTCUSDT': deque(maxlen=100), 'ETHUSDT': deque(maxlen=100)}
 
 
 async def listen_to_stream(
@@ -26,7 +22,9 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = data.get('p')
-                                history_price_currency = history_price[name]
+                                history_price_currency = (
+                                    alert_window.history_price[name]
+                                )
                                 if len(history_price_currency) == 0:
                                     trend = 'unknown'
                                 else:
@@ -48,7 +46,9 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = f"high: {data.get('h')} low: {data.get('l')}"
-                                history_price_currency = history_price[name]
+                                history_price_currency = (
+                                    alert_window.history_price[name]
+                                )
                                 if len(history_price_currency) == 0:
                                     trend = 'unknown'
                                 else:
