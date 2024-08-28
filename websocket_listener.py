@@ -32,9 +32,9 @@ async def listen_to_stream(
                                     if sum(history_price) / len(
                                         history_price
                                     ) >= float(data.get('p')):
-                                        trend = 'rising'
-                                    else:
                                         trend = 'falling'
+                                    else:
+                                        trend = 'rising'
                                 history_price.append(float(data.get('p')))
                                 alert_window.update_data(
                                     name, event_time, price, trend
@@ -51,9 +51,9 @@ async def listen_to_stream(
                                     if sum(history_price) / len(
                                         history_price
                                     ) >= float(data.get('c')):
-                                        trend = 'rising'
-                                    else:
                                         trend = 'falling'
+                                    else:
+                                        trend = 'rising'
                                 history_price.append(float(data.get('c')))
                                 alert_window.update_data(
                                     name, event_time, price, trend
