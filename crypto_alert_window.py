@@ -84,7 +84,7 @@ class CryptoAlertWindow:
         elif name == 'ETHUSDT':
             self.label_eth_time.config(text=f'Time: {time}')
             self.label_eth_price.config(text=f'Price: {price}')
-            self.label_eth_trend.config(text=f'Price: {trend}')
+            self.label_eth_trend.config(text=f'Trend: {trend}')
         self.root.update_idletasks()
 
     def change_font_size(self):
