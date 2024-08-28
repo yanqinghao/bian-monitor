@@ -5,7 +5,7 @@ from utils import format_timestamp, play_alert_sound
 from collections import deque
 
 # 创建一个最大长度为 5 的队列
-history_price = deque(maxlen=100)
+history_price = {'BTCUSDT': deque(maxlen=100), 'ETHUSDT': deque(maxlen=100)}
 
 
 async def listen_to_stream(
@@ -26,16 +26,19 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = data.get('p')
-                                if len(history_price) == 0:
+                                history_price_currency = history_price[name]
+                                if len(history_price_currency) == 0:
                                     trend = 'unknown'
                                 else:
-                                    if sum(history_price) / len(
-                                        history_price
+                                    if sum(history_price_currency) / len(
+                                        history_price_currency
                                     ) >= float(data.get('p')):
                                         trend = 'falling'
                                     else:
                                         trend = 'rising'
-                                history_price.append(float(data.get('p')))
+                                history_price_currency.append(
+                                    float(data.get('p'))
+                                )
                                 alert_window.update_data(
                                     name, event_time, price, trend
                                 )
@@ -45,16 +48,19 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = f"high: {data.get('h')} low: {data.get('l')}"
-                                if len(history_price) == 0:
+                                history_price_currency = history_price[name]
+                                if len(history_price_currency) == 0:
                                     trend = 'unknown'
                                 else:
-                                    if sum(history_price) / len(
-                                        history_price
+                                    if sum(history_price_currency) / len(
+                                        history_price_currency
                                     ) >= float(data.get('c')):
                                         trend = 'falling'
                                     else:
                                         trend = 'rising'
-                                history_price.append(float(data.get('c')))
+                                history_price_currency.append(
+                                    float(data.get('c'))
+                                )
                                 alert_window.update_data(
                                     name, event_time, price, trend
                                 )

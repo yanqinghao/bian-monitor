@@ -72,9 +72,11 @@ class CryptoAlertWindow:
             self.label_btc_title.configure(bg=new_color)
             self.label_btc_time.configure(bg=new_color)
             self.label_btc_price.configure(bg=new_color)
+            self.label_btc_trend.configure(bg=new_color)
             self.label_eth_title.configure(bg=new_color)
             self.label_eth_time.configure(bg=new_color)
             self.label_eth_price.configure(bg=new_color)
+            self.label_eth_trend.configure(bg=new_color)
 
     def update_data(self, name, time, price, trend):
         if name == 'BTCUSDT':
