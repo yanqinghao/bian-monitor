@@ -26,14 +26,26 @@ async def listen_to_stream(
                                     alert_window.history_price[name]
                                 )
                                 if len(history_price_currency) == 0:
-                                    trend = 'unknown'
+                                    trend = '⛔'
                                 else:
                                     if sum(history_price_currency) / len(
                                         history_price_currency
                                     ) >= float(data.get('p')):
-                                        trend = 'falling'
+                                        trend = '📉'
+                                        change = sum(
+                                            history_price_currency
+                                        ) / len(
+                                            history_price_currency
+                                        ) - float(
+                                            data.get('p')
+                                        )
+                                        trend += f'{change:.2f}'
                                     else:
-                                        trend = 'rising'
+                                        trend = '📈'
+                                        change = float(data.get('p')) - sum(
+                                            history_price_currency
+                                        ) / len(history_price_currency)
+                                        trend += f'{change:.2f}'
                                 history_price_currency.append(
                                     float(data.get('p'))
                                 )
@@ -50,14 +62,26 @@ async def listen_to_stream(
                                     alert_window.history_price[name]
                                 )
                                 if len(history_price_currency) == 0:
-                                    trend = 'unknown'
+                                    trend = '⛔'
                                 else:
                                     if sum(history_price_currency) / len(
                                         history_price_currency
                                     ) >= float(data.get('c')):
-                                        trend = 'falling'
+                                        trend = '📉'
+                                        change = sum(
+                                            history_price_currency
+                                        ) / len(
+                                            history_price_currency
+                                        ) - float(
+                                            data.get('c')
+                                        )
+                                        trend += f'{change:.2f}'
                                     else:
-                                        trend = 'rising'
+                                        trend = '📈'
+                                        change = float(data.get('c')) - sum(
+                                            history_price_currency
+                                        ) / len(history_price_currency)
+                                        trend += f'{change:.2f}'
                                 history_price_currency.append(
                                     float(data.get('c'))
                                 )
