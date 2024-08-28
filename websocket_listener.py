@@ -38,29 +38,27 @@ async def listen_to_stream(
                                 )
                                 play_alert_sound(name, data.get('h'))
                         elif msg.type == aiohttp.WSMsgType.CLOSED:
-                            alert_window.show_error_message(
+                            print(
                                 'WebSocket close',
                                 f'WebSocket closed, reconnecting in {reconnect_delay} seconds...',
                             )
                             break
                         elif msg.type == aiohttp.WSMsgType.ERROR:
-                            alert_window.show_error_message(
+                            print(
                                 'WebSocket error',
                                 f'WebSocket error, reconnecting in {reconnect_delay} seconds...',
                             )
                             break
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            alert_window.show_error_message(
+            print(
                 'Connection error',
                 f'Connection error: {e}, reconnecting in {reconnect_delay} seconds...',
             )
         except asyncio.CancelledError:
-            alert_window.show_info_message(
-                'listener cancelled', f'{stream_url} listener cancelled'
-            )
+            print('listener cancelled', f'{stream_url} listener cancelled')
             break
         except Exception as e:
-            alert_window.show_error_message(
+            print(
                 'Unexpected error',
                 f'Unexpected error: {e}, reconnecting in {reconnect_delay} seconds...',
             )
@@ -69,7 +67,5 @@ async def listen_to_stream(
         try:
             await asyncio.sleep(reconnect_delay)
         except asyncio.CancelledError:
-            alert_window.show_info_message(
-                'listener cancelled', f'{stream_url} listener cancelled'
-            )
+            print('listener cancelled', f'{stream_url} listener cancelled')
             break

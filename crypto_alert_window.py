@@ -256,7 +256,8 @@ class CryptoAlertWindow:
 
     def run_asyncio_loop(self):
         asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self.start_streams())
+        self.loop.create_task(self.start_streams())
+        self.loop.run_forever()  # 持续运行事件循环
 
     def run(self):
         self.root.mainloop()
@@ -264,8 +265,15 @@ class CryptoAlertWindow:
             self.asyncio_thread.join()
 
     def on_close(self):
-        for task in self.tasks:
-            task.cancel()
+        future = asyncio.run_coroutine_threadsafe(
+            self.cancel_tasks(), self.loop
+        )
+        try:
+            future.result()
+        except Exception as e:
+            self.show_error_message(
+                'websocket', f'Error during task cancellation: {e}'
+            )
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.root.quit()
         self.root.destroy()
@@ -290,6 +298,7 @@ class CryptoAlertWindow:
             task.cancel()
         await asyncio.wait(self.tasks, return_when=asyncio.ALL_COMPLETED)
         self.tasks.clear()
+        print('all task canceled')
 
     async def start_streams(self):
         tasks = []
