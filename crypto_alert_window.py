@@ -28,6 +28,8 @@ class CryptoAlertWindow:
         self.streams = [
             f'{i}{self.selected_stream.get()}' for i in self.base_streams
         ]
+        self.font_size = 10
+        self.bg_color = 'black'
 
         self.setup_ui()
         self.asyncio_thread = None
@@ -47,10 +49,12 @@ class CryptoAlertWindow:
 
     def setup_ui(self):
         self.root.title('Crypto Alert')
-        self.root.geometry('500x300')
+        self.root.geometry('600x100')
         self.root.attributes('-topmost', True)
-        self.root.configure(bg='black')
-        self.custom_font = tkFont.Font(family='Arial', size=10, weight='bold')
+        self.root.configure(bg=self.bg_color)
+        self.custom_font = tkFont.Font(
+            family='Arial', size=self.font_size, weight='bold'
+        )
         self.root.protocol('WM_DELETE_WINDOW', self.on_close)
 
         self.set_window_icon('BTC.png')
@@ -72,20 +76,27 @@ class CryptoAlertWindow:
             self.label_eth_time.configure(bg=new_color)
             self.label_eth_price.configure(bg=new_color)
 
-    def update_data(self, name, time, price):
+    def update_data(self, name, time, price, trend):
         if name == 'BTCUSDT':
             self.label_btc_time.config(text=f'Time: {time}')
             self.label_btc_price.config(text=f'Price: {price}')
+            self.label_btc_trend.config(text=f'Trend: {trend}')
         elif name == 'ETHUSDT':
             self.label_eth_time.config(text=f'Time: {time}')
             self.label_eth_price.config(text=f'Price: {price}')
+            self.label_eth_trend.config(text=f'Price: {trend}')
         self.root.update_idletasks()
 
     def change_font_size(self):
         new_size = simpledialog.askinteger(
-            'Input', 'Enter new font size:', minvalue=6, maxvalue=20
+            'Input',
+            'Enter new font size:',
+            minvalue=6,
+            maxvalue=20,
+            initialvalue=self.font_size,
         )
         if new_size:
+            self.font_size = new_size
             self.custom_font.configure(size=new_size)
 
     def show_info_message(self, title, message):
@@ -99,7 +110,9 @@ class CryptoAlertWindow:
 
     def change_proxy(self):
         new_proxy = simpledialog.askstring(
-            'Set Proxy', 'Enter new proxy URL (e.g., http://localhost:1081):'
+            'Set Proxy',
+            'Enter new proxy URL (e.g., http://localhost:1081):',
+            initialvalue=self.proxy_url,
         )
         if new_proxy:
             self.proxy_url = new_proxy
@@ -176,6 +189,14 @@ class CryptoAlertWindow:
             bg='black',
         )
         self.label_btc_price.pack(side=tk.LEFT, padx=5)
+        self.label_btc_trend = tk.Label(
+            self.frame_btc,
+            text='Trend: ',
+            font=self.custom_font,
+            fg='white',
+            bg='black',
+        )
+        self.label_btc_trend.pack(side=tk.LEFT, padx=5)
 
         # ETH 显示区域
         self.label_eth_title = tk.Label(
@@ -202,6 +223,14 @@ class CryptoAlertWindow:
             bg='black',
         )
         self.label_eth_price.pack(side=tk.LEFT, padx=5)
+        self.label_eth_trend = tk.Label(
+            self.frame_eth,
+            text='Trend: ',
+            font=self.custom_font,
+            fg='white',
+            bg='black',
+        )
+        self.label_eth_trend.pack(side=tk.LEFT, padx=5)
 
     def create_settings_tab(self):
         settings_tab = ttk.Frame(self.tab_control)

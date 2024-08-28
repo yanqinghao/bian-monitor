@@ -2,6 +2,10 @@ import aiohttp
 import asyncio
 import json
 from utils import format_timestamp, play_alert_sound
+from collections import deque
+
+# 创建一个最大长度为 5 的队列
+history_price = deque(maxlen=100)
 
 
 async def listen_to_stream(
@@ -22,9 +26,18 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = data.get('p')
-
+                                if len(history_price) == 0:
+                                    trend = 'unknown'
+                                else:
+                                    if sum(history_price) / len(
+                                        history_price
+                                    ) >= float(data.get('p')):
+                                        trend = 'rising'
+                                    else:
+                                        trend = 'falling'
+                                history_price.append(float(data.get('p')))
                                 alert_window.update_data(
-                                    name, event_time, price
+                                    name, event_time, price, trend
                                 )
                                 play_alert_sound(name, data.get('p'))
                             else:
@@ -32,11 +45,20 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = f"high: {data.get('h')} low: {data.get('l')}"
-
+                                if len(history_price) == 0:
+                                    trend = 'unknown'
+                                else:
+                                    if sum(history_price) / len(
+                                        history_price
+                                    ) >= float(data.get('c')):
+                                        trend = 'rising'
+                                    else:
+                                        trend = 'falling'
+                                history_price.append(float(data.get('c')))
                                 alert_window.update_data(
-                                    name, event_time, price
+                                    name, event_time, price, trend
                                 )
-                                play_alert_sound(name, data.get('h'))
+                                play_alert_sound(name, data.get('c'))
                         elif msg.type == aiohttp.WSMsgType.CLOSED:
                             print(
                                 'WebSocket close',
