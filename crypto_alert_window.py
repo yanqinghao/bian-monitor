@@ -168,10 +168,6 @@ class CryptoAlertWindow:
         self.streams = [
             f'{i}{self.selected_stream.get()}' for i in self.base_streams
         ]
-        self.history_price = {
-            'BTCUSDT': deque(maxlen=self.history_len),
-            'ETHUSDT': deque(maxlen=self.history_len),
-        }
         self.restart_websockets()
         self.show_info_message(
             'streams',
@@ -385,7 +381,10 @@ class CryptoAlertWindow:
             self.show_error_message(
                 'websocket', f'Error during task cancellation: {e}'
             )
-
+        self.history_price = {
+            'BTCUSDT': deque(maxlen=self.history_len),
+            'ETHUSDT': deque(maxlen=self.history_len),
+        }
         self.start_asyncio_thread()
 
     async def cancel_tasks(self):

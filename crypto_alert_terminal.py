@@ -55,12 +55,9 @@ class CryptoTop:
         stdscr.clear()
         stdscr.refresh()
 
-        # 初始化窗口布局
-        self.height, self.width = stdscr.getmaxyx()
-
         # 分割窗口区域
-        self.price_win = curses.newwin(self.height - 6, self.width, 0, 0)
-        self.settings_win = curses.newwin(6, self.width, self.height - 6, 0)
+        self.price_win = curses.newwin(7, 90, 0, 0)
+        self.settings_win = curses.newwin(7, 90, 7, 0)
 
         # 绘制初始界面
         self.draw_price_tab()
@@ -72,7 +69,7 @@ class CryptoTop:
 
         # 标题
         self.price_win.addstr(1, 2, 'Crypto Alert Terminal', curses.A_BOLD)
-        self.price_win.addstr(2, 2, '=' * (self.width - 4))
+        self.price_win.addstr(2, 2, '=' * (90 - 4))
 
         # 显示当前数据
         self.update_data_display()
@@ -243,7 +240,10 @@ class CryptoTop:
             self.show_error_message(
                 'websocket', f'Error during task cancellation: {e}'
             )
-
+        self.history_price = {
+            'BTCUSDT': deque(maxlen=self.history_len),
+            'ETHUSDT': deque(maxlen=self.history_len),
+        }
         self.start_asyncio_thread()
 
     async def cancel_tasks(self):
