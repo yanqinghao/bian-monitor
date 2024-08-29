@@ -32,6 +32,7 @@ class CryptoTop:
             'ETHUSDT': deque(maxlen=self.history_len),
         }
         self.asyncio_thread = None
+        self.running = True  # 添加运行标志
         self.start_asyncio_thread()
 
         # Initialize UI
@@ -187,10 +188,6 @@ class CryptoTop:
             self.streams = [
                 f'{i}{self.selected_stream}' for i in self.base_streams
             ]
-            self.history_price = {
-                'BTCUSDT': deque(maxlen=self.history_len),
-                'ETHUSDT': deque(maxlen=self.history_len),
-            }
             self.restart_websockets()
             self.settings_win.addstr(
                 1, 2, f'Stream type changed to {new_stream}'
@@ -217,11 +214,11 @@ class CryptoTop:
         self.loop.run_forever()  # 持续运行事件循环
 
     def run(self):
-        while True:
-            # 保留这个空循环以保持UI更新
+        while self.running:  # 检查运行标志
             pass
 
     def cleanup(self):
+        self.running = False  # 退出运行循环
         future = asyncio.run_coroutine_threadsafe(
             self.cancel_tasks(), self.loop
         )
