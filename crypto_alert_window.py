@@ -36,7 +36,9 @@ class CryptoAlertWindow:
             'BTCUSDT': deque(maxlen=self.history_len),
             'ETHUSDT': deque(maxlen=self.history_len),
         }
-
+        self.always_on_top = tk.BooleanVar(
+            value=True
+        )  # Variable for topmost option
         self.setup_ui()
         self.asyncio_thread = None
         self.start_asyncio_thread()
@@ -53,10 +55,16 @@ class CryptoAlertWindow:
         )
         self.asyncio_thread.start()
 
+    def toggle_always_on_top(self):
+        self.root.attributes('-topmost', self.always_on_top.get())
+
     def setup_ui(self):
         self.root.title('Crypto Alert')
         self.root.geometry('600x100')
-        self.root.attributes('-topmost', True)
+        self.root.attributes(
+            '-topmost', self.always_on_top.get()
+        )  # Set initial topmost state
+        # self.root.attributes('-topmost', True)
         self.root.configure(bg=self.bg_color)
         self.custom_font = tkFont.Font(
             family='Arial', size=self.font_size, weight='bold'
@@ -309,6 +317,17 @@ class CryptoAlertWindow:
         stream_combobox.bind(
             '<<ComboboxSelected>>', self.change_stream
         )  # 绑定选择事件
+
+        # Add Always on Top checkbox
+        always_on_top_checkbox = tk.Checkbutton(
+            scrollable_frame,
+            text='Always on Top',
+            variable=self.always_on_top,
+            onvalue=True,
+            offvalue=False,
+            command=self.toggle_always_on_top,
+        )
+        always_on_top_checkbox.pack(pady=10, padx=10, anchor='w')
 
     def set_window_icon(self, icon_path):
         try:
