@@ -92,7 +92,15 @@ class CryptoAlertWindow:
             self.label_eth_price.configure(bg=new_color)
             self.label_eth_trend.configure(bg=new_color)
 
-    def update_data(self, name, time, price, trend):
+    def update_data(self, name, time, price, trend, price_close=None):
+        self.history_price[name].append(
+            {
+                'time': time,
+                'price': price,
+                'trend': trend,
+                'price_close': price_close,
+            }
+        )
         if name == 'BTCUSDT':
             self.label_btc_time.config(text=f'Time: {time}')
             self.label_btc_price.config(text=f'Price: {price}')
@@ -160,6 +168,10 @@ class CryptoAlertWindow:
         self.streams = [
             f'{i}{self.selected_stream.get()}' for i in self.base_streams
         ]
+        self.history_price = {
+            'BTCUSDT': deque(maxlen=self.history_len),
+            'ETHUSDT': deque(maxlen=self.history_len),
+        }
         self.restart_websockets()
         self.show_info_message(
             'streams',

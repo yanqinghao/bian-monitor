@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import json
+import traceback
 from utils import format_timestamp, play_alert_sound
 
 
@@ -21,10 +22,11 @@ async def listen_to_stream(
                             if 'aggTrade' in stream_url:
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
-                                price = data.get('p')
-                                history_price_currency = (
-                                    alert_window.history_price[name]
-                                )
+                                price = float(data.get('p'))
+                                history_price_currency = [
+                                    i['price']
+                                    for i in alert_window.history_price[name]
+                                ]
                                 if len(history_price_currency) == 0:
                                     trend = '⛔'
                                 else:
@@ -46,9 +48,6 @@ async def listen_to_stream(
                                             history_price_currency
                                         ) / len(history_price_currency)
                                         trend += f'{change:.2f}'
-                                history_price_currency.append(
-                                    float(data.get('p'))
-                                )
                                 alert_window.update_data(
                                     name, event_time, price, trend
                                 )
@@ -58,9 +57,11 @@ async def listen_to_stream(
                                 event_time = format_timestamp(data.get('T'))
                                 name = data.get('s')
                                 price = f"high: {data.get('h')} low: {data.get('l')}"
-                                history_price_currency = (
-                                    alert_window.history_price[name]
-                                )
+                                price_close = float(data.get('c'))
+                                history_price_currency = [
+                                    i['price_close']
+                                    for i in alert_window.history_price[name]
+                                ]
                                 if len(history_price_currency) == 0:
                                     trend = '⛔'
                                 else:
@@ -82,11 +83,8 @@ async def listen_to_stream(
                                             history_price_currency
                                         ) / len(history_price_currency)
                                         trend += f'{change:.2f}'
-                                history_price_currency.append(
-                                    float(data.get('c'))
-                                )
                                 alert_window.update_data(
-                                    name, event_time, price, trend
+                                    name, event_time, price, trend, price_close
                                 )
                                 play_alert_sound(name, data.get('c'))
                         elif msg.type == aiohttp.WSMsgType.CLOSED:
@@ -114,6 +112,7 @@ async def listen_to_stream(
                 'Unexpected error',
                 f'Unexpected error: {e}, reconnecting in {reconnect_delay} seconds...',
             )
+            print(traceback.format_exc())
 
         # 确保在每次重连之前任务取消被正确处理
         try:
