@@ -53,10 +53,13 @@ async def listen_to_stream(
                                 )
                                 play_alert_sound(name, data.get('p'))
                             else:
+                                # print(data)
+                                event_time = format_timestamp(data.get('E'))
+
                                 data = data.get('k')
-                                event_time = format_timestamp(data.get('T'))
+                                # event_time = format_timestamp(data.get('t'))
                                 name = data.get('s')
-                                price = f"high: {data.get('h')} low: {data.get('l')}"
+                                price = f"h: {data.get('h')} l: {data.get('l')} o: {data.get('o')} c: {data.get('c')}"
                                 price_close = float(data.get('c'))
                                 history_price_currency = [
                                     i['price_close']

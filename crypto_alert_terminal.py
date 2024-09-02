@@ -56,8 +56,8 @@ class CryptoTop:
         stdscr.refresh()
 
         # 分割窗口区域
-        self.price_win = curses.newwin(7, 90, 0, 0)
-        self.settings_win = curses.newwin(7, 90, 7, 0)
+        self.price_win = curses.newwin(7, 110, 0, 0)
+        self.settings_win = curses.newwin(7, 110, 7, 0)
 
         # 绘制初始界面
         self.draw_price_tab()
@@ -69,7 +69,7 @@ class CryptoTop:
 
         # 标题
         self.price_win.addstr(1, 2, 'Crypto Alert Terminal', curses.A_BOLD)
-        self.price_win.addstr(2, 2, '=' * (90 - 4))
+        self.price_win.addstr(2, 2, '=' * (110 - 4))
 
         # 显示当前数据
         self.update_data_display()
