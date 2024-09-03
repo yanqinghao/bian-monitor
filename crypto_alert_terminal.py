@@ -50,6 +50,7 @@ class CryptoTop:
         self.candles = deque(maxlen=self.candles_limit)
         self.last_drawn_candle_time = None
         self.chart = None
+        self.chart_refresh_interval = 3
         self.selected_stream = 'kline_1m'
         self.streams = [
             f'{i}{self.selected_stream}' for i in self.base_streams
@@ -182,7 +183,10 @@ class CryptoTop:
 
         # # Clear the current screen
         # self.stdscr.clear()
-        if time.time() - self.last_drawn_candle_time > 3:
+        if (
+            time.time() - self.last_drawn_candle_time
+            > self.chart_refresh_interval
+        ):
             curses.curs_set(0)  # 隐藏光标
             curses.endwin()
             # self.stdscr.clear()  # Clear the screen to display the chart
@@ -193,7 +197,7 @@ class CryptoTop:
 
     def plot_candlestick_chart(self):
         symbol = self.show_input_screen(
-            'Enter symbol (e.g., BTCUSDT(1) or ETHUSDT(2), or others):'
+            'Enter symbol (e.g., BTCUSDT(1) or ETHUSDT(2), or others, default is BTCUSDT press enter):'
         )
         if symbol == '1':
             symbol = 'BTCUSDT'
@@ -202,14 +206,24 @@ class CryptoTop:
         elif symbol == '':
             symbol = 'BTCUSDT'
         self.symbol = symbol
-        interval = self.show_input_screen('Enter interval (e.g., 15m):')
+        interval = self.show_input_screen(
+            'Enter interval (e.g., 15m, default is 15m press enter):'
+        )
         if interval == '':
             interval = '15m'
         self.interval = interval
-        limit = self.show_input_screen('Enter limit (e.g., 96):')
+        limit = self.show_input_screen(
+            'Enter limit (e.g., 96, default is 96 press enter):'
+        )
         if limit == '':
             limit = 96
         self.candles_limit = int(limit)
+        chart_refresh_interval = self.show_input_screen(
+            'Enter chart refresh interval (e.g., 3, default is 3 press enter):'
+        )
+        if chart_refresh_interval == '':
+            chart_refresh_interval = 3
+        self.chart_refresh_interval = int(chart_refresh_interval)
         future = asyncio.run_coroutine_threadsafe(
             self.cancel_tasks(), self.loop
         )
