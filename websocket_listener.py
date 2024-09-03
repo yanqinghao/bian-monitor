@@ -2,11 +2,17 @@ import aiohttp
 import asyncio
 import json
 import traceback
+from candlestick_chart import Candle
 from utils import format_timestamp, play_alert_sound
 
 
 async def listen_to_stream(
-    stream_url, proxy_url, alert_window, reconnect_delay=5, timeout=10
+    stream_url,
+    proxy_url,
+    alert_window,
+    reconnect_delay=5,
+    timeout=10,
+    is_candle=False,
 ):
     while True:
         try:
@@ -17,91 +23,137 @@ async def listen_to_stream(
                     stream_url, proxy=proxy_url
                 ) as websocket:
                     async for msg in websocket:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            data = json.loads(msg.data)
-                            if 'aggTrade' in stream_url:
-                                event_time = format_timestamp(data.get('T'))
-                                name = data.get('s')
-                                price = float(data.get('p'))
-                                history_price_currency = [
-                                    i['price']
-                                    for i in alert_window.history_price[name]
-                                ]
-                                if len(history_price_currency) == 0:
-                                    trend = '⛔'
-                                else:
-                                    if sum(history_price_currency) / len(
-                                        history_price_currency
-                                    ) >= float(data.get('p')):
-                                        trend = '📉'
-                                        change = sum(
-                                            history_price_currency
-                                        ) / len(
-                                            history_price_currency
-                                        ) - float(
-                                            data.get('p')
-                                        )
-                                        trend += f'{change:.2f}'
+                        if not is_candle:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                data = json.loads(msg.data)
+                                if 'aggTrade' in stream_url:
+                                    event_time = format_timestamp(
+                                        data.get('T')
+                                    )
+                                    name = data.get('s')
+                                    price = float(data.get('p'))
+                                    history_price_currency = [
+                                        i['price']
+                                        for i in alert_window.history_price[
+                                            name
+                                        ]
+                                    ]
+                                    if len(history_price_currency) == 0:
+                                        trend = '⛔'
                                     else:
-                                        trend = '📈'
-                                        change = float(data.get('p')) - sum(
+                                        if sum(history_price_currency) / len(
                                             history_price_currency
-                                        ) / len(history_price_currency)
-                                        trend += f'{change:.2f}'
-                                alert_window.update_data(
-                                    name, event_time, price, trend
-                                )
-                                play_alert_sound(name, data.get('p'))
-                            else:
-                                # print(data)
-                                event_time = format_timestamp(data.get('E'))
+                                        ) >= float(data.get('p')):
+                                            trend = '📉'
+                                            change = sum(
+                                                history_price_currency
+                                            ) / len(
+                                                history_price_currency
+                                            ) - float(
+                                                data.get('p')
+                                            )
+                                            trend += f'{change:.2f}'
+                                        else:
+                                            trend = '📈'
+                                            change = float(
+                                                data.get('p')
+                                            ) - sum(
+                                                history_price_currency
+                                            ) / len(
+                                                history_price_currency
+                                            )
+                                            trend += f'{change:.2f}'
+                                    alert_window.update_data(
+                                        name, event_time, price, trend
+                                    )
+                                    play_alert_sound(name, data.get('p'))
+                                else:
+                                    # print(data)
+                                    event_time = format_timestamp(
+                                        data.get('E')
+                                    )
 
-                                data = data.get('k')
-                                # event_time = format_timestamp(data.get('t'))
-                                name = data.get('s')
-                                price = f"h: {data.get('h')} l: {data.get('l')} o: {data.get('o')} c: {data.get('c')}"
-                                price_close = float(data.get('c'))
-                                history_price_currency = [
-                                    i['price_close']
-                                    for i in alert_window.history_price[name]
-                                ]
-                                if len(history_price_currency) == 0:
-                                    trend = '⛔'
-                                else:
-                                    if sum(history_price_currency) / len(
-                                        history_price_currency
-                                    ) >= float(data.get('c')):
-                                        trend = '📉'
-                                        change = sum(
-                                            history_price_currency
-                                        ) / len(
-                                            history_price_currency
-                                        ) - float(
-                                            data.get('c')
-                                        )
-                                        trend += f'{change:.2f}'
+                                    data = data.get('k')
+                                    # event_time = format_timestamp(data.get('t'))
+                                    name = data.get('s')
+                                    price = f"h: {data.get('h')} l: {data.get('l')} o: {data.get('o')} c: {data.get('c')}"
+                                    price_close = float(data.get('c'))
+                                    history_price_currency = [
+                                        i['price_close']
+                                        for i in alert_window.history_price[
+                                            name
+                                        ]
+                                    ]
+                                    if len(history_price_currency) == 0:
+                                        trend = '⛔'
                                     else:
-                                        trend = '📈'
-                                        change = float(data.get('c')) - sum(
+                                        if sum(history_price_currency) / len(
                                             history_price_currency
-                                        ) / len(history_price_currency)
-                                        trend += f'{change:.2f}'
-                                alert_window.update_data(
-                                    name, event_time, price, trend, price_close
+                                        ) >= float(data.get('c')):
+                                            trend = '📉'
+                                            change = sum(
+                                                history_price_currency
+                                            ) / len(
+                                                history_price_currency
+                                            ) - float(
+                                                data.get('c')
+                                            )
+                                            trend += f'{change:.2f}'
+                                        else:
+                                            trend = '📈'
+                                            change = float(
+                                                data.get('c')
+                                            ) - sum(
+                                                history_price_currency
+                                            ) / len(
+                                                history_price_currency
+                                            )
+                                            trend += f'{change:.2f}'
+                                    alert_window.update_data(
+                                        name,
+                                        event_time,
+                                        price,
+                                        trend,
+                                        price_close,
+                                    )
+                                    play_alert_sound(name, data.get('c'))
+                            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                                print(
+                                    'WebSocket close',
+                                    f'WebSocket closed, reconnecting in {reconnect_delay} seconds...',
                                 )
-                                play_alert_sound(name, data.get('c'))
-                        elif msg.type == aiohttp.WSMsgType.CLOSED:
-                            print(
-                                'WebSocket close',
-                                f'WebSocket closed, reconnecting in {reconnect_delay} seconds...',
-                            )
-                            break
-                        elif msg.type == aiohttp.WSMsgType.ERROR:
-                            print(
-                                'WebSocket error',
-                                f'WebSocket error, reconnecting in {reconnect_delay} seconds...',
-                            )
-                            break
+                                break
+                            elif msg.type == aiohttp.WSMsgType.ERROR:
+                                print(
+                                    'WebSocket error',
+                                    f'WebSocket error, reconnecting in {reconnect_delay} seconds...',
+                                )
+                                break
+                        else:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                data = json.loads(msg.data)
+                                data = data.get('k')
+                                candle = Candle(
+                                    open=data.get('o'),
+                                    close=data.get('c'),
+                                    high=data.get('h'),
+                                    low=data.get('l'),
+                                    volume=data.get('v'),
+                                    timestamp=data.get('t'),
+                                )
+                                alert_window.update_candlestick_chart(candle)
+                            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                                print(
+                                    'WebSocket close',
+                                    f'WebSocket closed, reconnecting in {reconnect_delay} seconds...',
+                                )
+                                break
+                            elif msg.type == aiohttp.WSMsgType.ERROR:
+                                print(
+                                    'WebSocket error',
+                                    f'WebSocket error, reconnecting in {reconnect_delay} seconds...',
+                                )
+                                break
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             print(
                 'Connection error',

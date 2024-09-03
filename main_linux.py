@@ -16,7 +16,7 @@ def main(stdscr):
 
             # 处理其他按键输入
             elif c == ord('c'):
-                app.change_bg_color()
+                app.plot_candlestick_chart()
             elif c == ord('f'):
                 app.change_font_size()
             elif c == ord('p'):

@@ -1,3 +1,4 @@
 aiohttp
 pillow
 pyinstaller
+candlestick-chart

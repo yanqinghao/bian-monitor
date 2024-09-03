@@ -1,8 +1,28 @@
 import curses
+import time
+import requests
+from candlestick_chart import Candle, Chart
+from dataclasses import dataclass
 import asyncio
 import threading
 from collections import deque
 from websocket_listener import listen_to_stream
+
+
+@dataclass(frozen=True, slots=True)
+class BinanceKlinesItem:
+    open_time: int
+    open: str
+    high: str
+    low: str
+    close: str
+    volume: str
+    close_time: int
+    quote_asset_volume: str
+    number_of_trades: int
+    taker_buy_base_asset_volume: str
+    taker_buy_quote_asset_volume: str
+    ignore: str
 
 
 class CryptoTop:
@@ -20,6 +40,15 @@ class CryptoTop:
             'kline_1h',
             'kline_4h',
         ]
+        self.symbols = [
+            'BTCUSDT',
+            'ETHUSDT',
+        ]
+        self.symbol = 'BTCUSDT'
+        self.candles_limit = 1000
+        self.interval = '15m'
+        self.candles = deque(maxlen=self.candles_limit)
+        self.last_drawn_candle_time = None
         self.selected_stream = 'kline_1m'
         self.streams = [
             f'{i}{self.selected_stream}' for i in self.base_streams
@@ -32,34 +61,40 @@ class CryptoTop:
             'ETHUSDT': deque(maxlen=self.history_len),
         }
         self.asyncio_thread = None
-        self.running = True  # 添加运行标志
+        self.running = True
         self.start_asyncio_thread()
 
         # Initialize UI
         self.setup_ui(stdscr)
 
     def start_asyncio_thread(self):
-        # 如果已有线程在运行，先停止它
         if self.asyncio_thread and self.asyncio_thread.is_alive():
             self.loop.call_soon_threadsafe(self.loop.stop)
             self.asyncio_thread.join()
 
-        # 创建并启动新的 asyncio 事件循环线程
         self.asyncio_thread = threading.Thread(
             target=self.run_asyncio_loop, daemon=True
         )
         self.asyncio_thread.start()
 
+    def start_candle_asyncio_thread(self):
+        if self.asyncio_thread and self.asyncio_thread.is_alive():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+            self.asyncio_thread.join()
+
+        self.asyncio_thread = threading.Thread(
+            target=self.run_candle_asyncio_loop, daemon=True
+        )
+        self.asyncio_thread.start()
+
     def setup_ui(self, stdscr):
-        curses.curs_set(0)  # 隐藏光标
+        curses.curs_set(0)
         stdscr.clear()
         stdscr.refresh()
 
-        # 分割窗口区域
         self.price_win = curses.newwin(7, 110, 0, 0)
         self.settings_win = curses.newwin(7, 110, 7, 0)
 
-        # 绘制初始界面
         self.draw_price_tab()
         self.draw_settings_tab()
 
@@ -67,11 +102,9 @@ class CryptoTop:
         self.price_win.clear()
         self.price_win.border(0)
 
-        # 标题
         self.price_win.addstr(1, 2, 'Crypto Alert Terminal', curses.A_BOLD)
         self.price_win.addstr(2, 2, '=' * (110 - 4))
 
-        # 显示当前数据
         self.update_data_display()
 
         self.price_win.refresh()
@@ -86,7 +119,6 @@ class CryptoTop:
         self.price_win.refresh()
 
     def update_data(self, name, time, price, trend, price_close=None):
-        # 更新历史记录
         self.history_price[name].append(
             {
                 'time': time,
@@ -101,8 +133,7 @@ class CryptoTop:
         self.settings_win.clear()
         self.settings_win.border(0)
 
-        # 菜单项
-        self.settings_win.addstr(1, 2, 'Press "c" to change background color')
+        self.settings_win.addstr(1, 2, 'Press "c" to check candlestick chart')
         self.settings_win.addstr(2, 2, 'Press "f" to change font size')
         self.settings_win.addstr(3, 2, 'Press "p" to change proxy URL')
         self.settings_win.addstr(4, 2, 'Press "m" to change memory length')
@@ -111,7 +142,6 @@ class CryptoTop:
         self.settings_win.refresh()
 
     def show_input_screen(self, prompt):
-        """显示输入界面"""
         self.settings_win.clear()
         self.settings_win.border(0)
         self.settings_win.addstr(2, 2, prompt, curses.A_BOLD)
@@ -123,12 +153,142 @@ class CryptoTop:
 
         return input_value
 
-    def change_bg_color(self):
-        self.settings_win.addstr(
-            1, 2, 'Changing background color is not supported', curses.A_BLINK
+    def fetch_candlestick_data(self, symbol, interval, limit):
+        url = f'https://api.binance.com/api/v3/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}'
+        with requests.get(url) as req:
+            klines = [BinanceKlinesItem(*item) for item in req.json()]
+
+        candles = [
+            Candle(
+                open=kline.open,
+                close=kline.close,
+                high=kline.high,
+                low=kline.low,
+                volume=kline.volume,
+                timestamp=kline.open_time,
+            )
+            for kline in klines
+        ]
+
+        return candles
+
+    def update_candlestick_chart(self, candle: Candle):
+        if candle.timestamp in [c.timestamp for c in self.candles]:
+            self.candles.pop()
+        else:
+            self.candles = self.candles[-self.candles_limit :]
+        self.candles.append(candle)
+
+        # # Clear the current screen
+        # self.stdscr.clear()
+        if time.time() - self.last_drawn_candle_time > 3:
+            curses.curs_set(0)  # 隐藏光标
+            curses.endwin()
+            # self.stdscr.clear()  # Clear the screen to display the chart
+            chart = Chart(
+                self.candles, title=f'{self.symbol.upper()} Candlestick Chart'
+            )
+
+            chart.set_bull_color(1, 205, 254)
+            chart.set_bear_color(255, 107, 153)
+            chart.set_volume_pane_height(4)
+            chart.set_volume_pane_enabled(True)
+            chart.draw()
+        # Refresh the screen to display the changes
+        # self.stdscr.refresh()
+
+    def plot_candlestick_chart(self):
+        symbol = self.show_input_screen(
+            'Enter symbol (e.g., BTCUSDT(1) or ETHUSDT(2), or others):'
         )
-        self.settings_win.refresh()
-        self.return_to_main_screen()
+        if symbol == '1':
+            symbol = 'BTCUSDT'
+        elif symbol == '2':
+            symbol = 'ETHUSDT'
+        elif symbol == '':
+            symbol = 'BTCUSDT'
+        self.symbol = symbol
+        interval = self.show_input_screen('Enter interval (e.g., 15m):')
+        if interval == '':
+            interval = '15m'
+        self.interval = interval
+        limit = self.show_input_screen('Enter limit (e.g., 96):')
+        if limit == '':
+            limit = 96
+        self.candles_limit = int(limit)
+        future = asyncio.run_coroutine_threadsafe(
+            self.cancel_tasks(), self.loop
+        )
+        try:
+            future.result()
+        except Exception as e:
+            self.show_error_message(
+                'websocket', f'Error during task cancellation: {e}'
+            )
+        self.history_price = {
+            'BTCUSDT': deque(maxlen=self.history_len),
+            'ETHUSDT': deque(maxlen=self.history_len),
+        }
+
+        try:
+            candles = self.fetch_candlestick_data(
+                self.symbol, interval, self.candles_limit
+            )
+            self.candles = candles
+            # Exit curses before plotting the chart
+            curses.curs_set(0)  # 隐藏光标
+            curses.endwin()
+            # self.stdscr = curses.initscr()
+            # curses.curs_set(0)  # Hide cursor
+            # self.stdscr.clear()  # Clear the screen to display the chart
+            chart = Chart(
+                self.candles, title=f'{symbol.upper()} Candlestick Chart'
+            )
+
+            chart.set_bull_color(1, 205, 254)
+            chart.set_bear_color(255, 107, 153)
+            chart.set_volume_pane_height(4)
+            chart.set_volume_pane_enabled(True)
+            chart.draw()
+
+            self.last_drawn_candle_time = time.time()
+
+            self.start_candle_asyncio_thread()
+
+            self.show_return_prompt()
+
+        except Exception as e:
+            self.settings_win.addstr(1, 2, f'Error: {e}', curses.A_BLINK)
+            self.settings_win.refresh()
+            self.candles_limit = 1000
+            self.candles = deque(maxlen=self.candles_limit)
+            self.return_to_main_screen()
+        finally:
+            # Restart curses after plotting
+            self.stdscr = curses.initscr()
+            curses.curs_set(0)  # Hide cursor
+            self.setup_ui(self.stdscr)
+            self.start_asyncio_thread()
+
+    def show_return_prompt(self):
+        # self.stdscr.addstr(1, 2, 'Press "r" to return to the main screen')
+        # self.stdscr.refresh()
+        while True:
+            key = self.stdscr.getch()
+            if key == ord('r'):
+                self.candles_limit = 1000
+                self.candles = deque(maxlen=self.candles_limit)
+                future = asyncio.run_coroutine_threadsafe(
+                    self.cancel_tasks(), self.loop
+                )
+                try:
+                    future.result()
+                except Exception as e:
+                    self.show_error_message(
+                        'websocket', f'Error during task cancellation: {e}'
+                    )
+                self.return_to_main_screen()
+                break
 
     def change_font_size(self):
         input_size = self.show_input_screen('Enter new font size (6-20):')
@@ -197,25 +357,25 @@ class CryptoTop:
         self.return_to_main_screen()
 
     def return_to_main_screen(self):
-        """返回初始界面"""
-        self.draw_price_tab()
-        self.draw_settings_tab()
-
-    def set_window_icon(self, icon_path):
-        # 不支持图标设置，在终端模式下忽略
-        pass
+        self.stdscr.clear()
+        self.setup_ui(self.stdscr)
 
     def run_asyncio_loop(self):
         asyncio.set_event_loop(self.loop)
         self.loop.create_task(self.start_streams())
-        self.loop.run_forever()  # 持续运行事件循环
+        self.loop.run_forever()
+
+    def run_candle_asyncio_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.create_task(self.start_candle_listener())
+        self.loop.run_forever()
 
     def run(self):
         while self.running:  # 检查运行标志
             pass
 
     def cleanup(self):
-        self.running = False  # 退出运行循环
+        self.running = False
         future = asyncio.run_coroutine_threadsafe(
             self.cancel_tasks(), self.loop
         )
@@ -251,7 +411,6 @@ class CryptoTop:
             task.cancel()
         await asyncio.wait(self.tasks, return_when=asyncio.ALL_COMPLETED)
         self.tasks.clear()
-        print('all task canceled')
 
     async def start_streams(self):
         tasks = []
@@ -265,5 +424,17 @@ class CryptoTop:
 
         try:
             await asyncio.gather(*tasks)
+        except Exception as e:
+            self.show_error_message('task', f'Tasks exist with error: {e}')
+
+    async def start_candle_listener(self):
+        stream_url = f'wss://fstream.binance.com/ws/{self.symbol.lower()}@kline_{self.interval}'
+        task = asyncio.create_task(
+            listen_to_stream(stream_url, self.proxy_url, self, is_candle=True)
+        )
+        self.tasks.append(task)
+
+        try:
+            await asyncio.gather(*self.tasks)
         except Exception as e:
             self.show_error_message('task', f'Tasks exist with error: {e}')
