@@ -8,5 +8,5 @@ pyinstaller .\main.py --onefile --noconsole --name crypto_monitor -i BTC.png --a
 ```shell
 pyinstaller main_linux.py --onefile --noconsole --name crypto_monitor
 chmod +x dist/crypto_monitor
-mv dist/crypto_monitor /usr/local/bin
+sudo mv dist/crypto_monitor /usr/local/bin
 ```
