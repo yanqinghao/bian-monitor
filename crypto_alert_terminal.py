@@ -49,6 +49,7 @@ class CryptoTop:
         self.interval = '15m'
         self.candles = deque(maxlen=self.candles_limit)
         self.last_drawn_candle_time = None
+        self.chart = None
         self.selected_stream = 'kline_1m'
         self.streams = [
             f'{i}{self.selected_stream}' for i in self.base_streams
@@ -185,15 +186,8 @@ class CryptoTop:
             curses.curs_set(0)  # 隐藏光标
             curses.endwin()
             # self.stdscr.clear()  # Clear the screen to display the chart
-            chart = Chart(
-                self.candles, title=f'{self.symbol.upper()} Candlestick Chart'
-            )
-
-            chart.set_bull_color(1, 205, 254)
-            chart.set_bear_color(255, 107, 153)
-            chart.set_volume_pane_height(4)
-            chart.set_volume_pane_enabled(True)
-            chart.draw()
+            self.chart.update_candles(self.candles, reset=True)
+            self.chart.draw()
         # Refresh the screen to display the changes
         # self.stdscr.refresh()
 
@@ -241,15 +235,15 @@ class CryptoTop:
             # self.stdscr = curses.initscr()
             # curses.curs_set(0)  # Hide cursor
             # self.stdscr.clear()  # Clear the screen to display the chart
-            chart = Chart(
+            self.chart = Chart(
                 self.candles, title=f'{symbol.upper()} Candlestick Chart'
             )
 
-            chart.set_bull_color(1, 205, 254)
-            chart.set_bear_color(255, 107, 153)
-            chart.set_volume_pane_height(4)
-            chart.set_volume_pane_enabled(True)
-            chart.draw()
+            self.chart.set_bull_color(1, 205, 254)
+            self.chart.set_bear_color(255, 107, 153)
+            self.chart.set_volume_pane_height(4)
+            self.chart.set_volume_pane_enabled(True)
+            self.chart.draw()
 
             self.last_drawn_candle_time = time.time()
 
