@@ -197,6 +197,7 @@ class CryptoTop:
             > self.chart_refresh_interval
         ):
             curses.curs_set(0)  # 隐藏光标
+            self.stdscr.clear()
             curses.endwin()
             # self.stdscr.clear()  # Clear the screen to display the chart
             self.chart.update_candles(self.candles, reset=True)
@@ -248,11 +249,9 @@ class CryptoTop:
         }
 
         try:
-            print('test1')
             candles = self.fetch_candlestick_data(
                 self.symbol, interval, self.candles_limit
             )
-            print('test2')
 
             self.candles = candles
             # Exit curses before plotting the chart
