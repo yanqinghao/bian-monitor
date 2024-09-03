@@ -156,8 +156,17 @@ class CryptoTop:
         return input_value
 
     def fetch_candlestick_data(self, symbol, interval, limit):
-        url = f'https://api.binance.com/api/v3/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}'
-        with requests.get(url) as req:
+        url = f'https://api.binance.com/api/v1/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}'
+        # Define the proxy dictionary if a proxy is provided
+        proxies = (
+            {
+                'http': self.proxy_url,
+                'https': self.proxy_url,
+            }
+            if self.proxy_url
+            else None
+        )
+        with requests.get(url, proxies=proxies) as req:
             klines = [BinanceKlinesItem(*item) for item in req.json()]
 
         candles = [
@@ -239,9 +248,12 @@ class CryptoTop:
         }
 
         try:
+            print('test1')
             candles = self.fetch_candlestick_data(
                 self.symbol, interval, self.candles_limit
             )
+            print('test2')
+
             self.candles = candles
             # Exit curses before plotting the chart
             curses.curs_set(0)  # 隐藏光标
