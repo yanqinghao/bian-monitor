@@ -44,12 +44,13 @@ def alert_action(coin_name, price, winsound, curses):
     if os.name == 'nt' and winsound:  # Windows系统
         winsound.Beep(1000, 500)
     elif os.name == 'posix' and curses:  # 类Unix系统
-        stdscr = curses.initscr()
-        curses.start_color()
-        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
-        stdscr.addstr(
-            0, 0, f'Alert! {coin_name} price is {price}', curses.color_pair(1)
-        )
-        stdscr.refresh()
-        curses.napms(2000)  # 显示2秒钟
-        curses.endwin()
+        # stdscr = curses.initscr()
+        # curses.start_color()
+        # curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        # stdscr.addstr(
+        #     0, 0, f'Alert! {coin_name} price is {price}', curses.color_pair(1)
+        # )
+        # stdscr.refresh()
+        # curses.napms(2000)  # 显示2秒钟
+        # curses.endwin()
+        pass
