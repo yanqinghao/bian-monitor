@@ -31,7 +31,7 @@ class CryptoTop:
         self.loop = asyncio.new_event_loop()
         self.tasks = []
         self.proxy_url = 'http://10.33.58.241:1081'
-        self.base_streams = ['ethusdt@', 'btcusdt@']
+        self.base_streams = ['ethusdt@', 'btcusdt@', 'solusdt@']
         self.stream_options = [
             'aggTrade',
             'kline_1m',
@@ -51,7 +51,7 @@ class CryptoTop:
         self.last_drawn_candle_time = None
         self.chart = None
         self.chart_refresh_interval = 3
-        self.selected_stream = 'kline_1m'
+        self.selected_stream = 'kline_15m'
         self.streams = [
             f'{i}{self.selected_stream}' for i in self.base_streams
         ]
@@ -61,6 +61,7 @@ class CryptoTop:
         self.history_price = {
             'BTCUSDT': deque(maxlen=self.history_len),
             'ETHUSDT': deque(maxlen=self.history_len),
+            'SOLUSDT': deque(maxlen=self.history_len),
         }
         self.asyncio_thread = None
         self.running = True
@@ -94,8 +95,8 @@ class CryptoTop:
         stdscr.clear()
         stdscr.refresh()
 
-        self.price_win = curses.newwin(7, 110, 0, 0)
-        self.settings_win = curses.newwin(7, 110, 7, 0)
+        self.price_win = curses.newwin(9, 110, 0, 0)
+        self.settings_win = curses.newwin(7, 110, 9, 0)
 
         self.draw_price_tab()
         self.draw_settings_tab()
@@ -114,9 +115,11 @@ class CryptoTop:
     def update_data_display(self):
         btc_line = f"BTC: Time: {self.history_price['BTCUSDT'][-1]['time'] if self.history_price['BTCUSDT'] else 'N/A'} Price: {self.history_price['BTCUSDT'][-1]['price'] if self.history_price['BTCUSDT'] else 'N/A'} Trend: {self.history_price['BTCUSDT'][-1]['trend'] if self.history_price['BTCUSDT'] else 'N/A'}"
         eth_line = f"ETH: Time: {self.history_price['ETHUSDT'][-1]['time'] if self.history_price['ETHUSDT'] else 'N/A'} Price: {self.history_price['ETHUSDT'][-1]['price'] if self.history_price['ETHUSDT'] else 'N/A'} Trend: {self.history_price['ETHUSDT'][-1]['trend'] if self.history_price['ETHUSDT'] else 'N/A'}"
+        sol_line = f"SOL: Time: {self.history_price['SOLUSDT'][-1]['time'] if self.history_price['SOLUSDT'] else 'N/A'} Price: {self.history_price['SOLUSDT'][-1]['price'] if self.history_price['SOLUSDT'] else 'N/A'} Trend: {self.history_price['SOLUSDT'][-1]['trend'] if self.history_price['SOLUSDT'] else 'N/A'}"
 
         self.price_win.addstr(4, 2, btc_line)
         self.price_win.addstr(5, 2, eth_line)
+        self.price_win.addstr(6, 2, sol_line)
 
         self.price_win.refresh()
 
@@ -422,6 +425,7 @@ class CryptoTop:
         self.history_price = {
             'BTCUSDT': deque(maxlen=self.history_len),
             'ETHUSDT': deque(maxlen=self.history_len),
+            'SOLUSDT': deque(maxlen=self.history_len),
         }
         self.start_asyncio_thread()
 
