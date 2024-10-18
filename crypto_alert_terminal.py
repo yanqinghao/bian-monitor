@@ -117,19 +117,6 @@ class CryptoTop:
 
         self.price_win.refresh()
 
-    # def update_data_display(self):
-    #     btc_line = f"BTC: Time: {self.history_price['BTCUSDT'][-1]['time'] if self.history_price['BTCUSDT'] else 'N/A'} Price: {self.history_price['BTCUSDT'][-1]['price'] if self.history_price['BTCUSDT'] else 'N/A'} Trend: {self.history_price['BTCUSDT'][-1]['trend'] if self.history_price['BTCUSDT'] else 'N/A'}"
-    #     eth_line = f"ETH: Time: {self.history_price['ETHUSDT'][-1]['time'] if self.history_price['ETHUSDT'] else 'N/A'} Price: {self.history_price['ETHUSDT'][-1]['price'] if self.history_price['ETHUSDT'] else 'N/A'} Trend: {self.history_price['ETHUSDT'][-1]['trend'] if self.history_price['ETHUSDT'] else 'N/A'}"
-    #     sol_line = f"SOL: Time: {self.history_price['SOLUSDT'][-1]['time'] if self.history_price['SOLUSDT'] else 'N/A'} Price: {self.history_price['SOLUSDT'][-1]['price'] if self.history_price['SOLUSDT'] else 'N/A'} Trend: {self.history_price['SOLUSDT'][-1]['trend'] if self.history_price['SOLUSDT'] else 'N/A'}"
-    #     doge_line = f"DOGE: Time: {self.history_price['DOGEUSDT'][-1]['time'] if self.history_price['DOGEUSDT'] else 'N/A'} Price: {self.history_price['DOGEUSDT'][-1]['price'] if self.history_price['DOGEUSDT'] else 'N/A'} Trend: {self.history_price['DOGEUSDT'][-1]['trend'] if self.history_price['DOGEUSDT'] else 'N/A'}"
-
-    #     self.price_win.addstr(4, 2, btc_line)
-    #     self.price_win.addstr(5, 2, eth_line)
-    #     self.price_win.addstr(6, 2, sol_line)
-    #     self.price_win.addstr(7, 2, doge_line)
-
-    #     self.price_win.refresh()
-
     def update_data(self, name, time, price, trend, price_close=None):
         self.history_price[name].append(
             {
@@ -226,7 +213,7 @@ class CryptoTop:
         return input_value
 
     def fetch_candlestick_data(self, symbol, interval, limit):
-        url = f'https://api.binance.com/api/v1/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}'
+        url = f'https://api.binance.com/api/v3/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}'
         # Define the proxy dictionary if a proxy is provided
         proxies = (
             {
@@ -314,8 +301,7 @@ class CryptoTop:
                 'websocket', f'Error during task cancellation: {e}'
             )
         self.history_price = {
-            'BTCUSDT': deque(maxlen=self.history_len),
-            'ETHUSDT': deque(maxlen=self.history_len),
+            symbol: deque(maxlen=self.history_len) for symbol in self.symbols
         }
 
         try:
@@ -414,8 +400,8 @@ class CryptoTop:
             new_len = int(new_len)
             self.history_len = new_len
             self.history_price = {
-                'BTCUSDT': deque(maxlen=self.history_len),
-                'ETHUSDT': deque(maxlen=self.history_len),
+                symbol: deque(maxlen=self.history_len)
+                for symbol in self.symbols
             }
             self.settings_win.addstr(
                 1, 2, f'History length changed to {new_len}'

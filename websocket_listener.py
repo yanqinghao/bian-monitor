@@ -40,41 +40,29 @@ async def listen_to_stream(
                                     ]
                                     if len(history_price_currency) == 0:
                                         trend = '⛔'
+                                        percent_change = 0
                                     else:
-                                        if sum(history_price_currency) / len(
+                                        avg_price = sum(
                                             history_price_currency
-                                        ) >= float(data.get('p')):
+                                        ) / len(history_price_currency)
+                                        percent_change = (
+                                            (price - avg_price) / avg_price
+                                        ) * 100
+                                        if percent_change < 0:
                                             trend = '📉'
-                                            change = sum(
-                                                history_price_currency
-                                            ) / len(
-                                                history_price_currency
-                                            ) - float(
-                                                data.get('p')
-                                            )
-                                            trend += f'{change:.2f}'
                                         else:
                                             trend = '📈'
-                                            change = float(
-                                                data.get('p')
-                                            ) - sum(
-                                                history_price_currency
-                                            ) / len(
-                                                history_price_currency
-                                            )
-                                            trend += f'{change:.2f}'
+
+                                    trend += f'{percent_change:.2f}%'
                                     alert_window.update_data(
                                         name, event_time, price, trend
                                     )
                                     play_alert_sound(name, data.get('p'))
                                 else:
-                                    # print(data)
                                     event_time = format_timestamp(
                                         data.get('E')
                                     )
-
                                     data = data.get('k')
-                                    # event_time = format_timestamp(data.get('t'))
                                     name = data.get('s')
                                     price = f"h: {data.get('h')} l: {data.get('l')} o: {data.get('o')} c: {data.get('c')}"
                                     price_close = float(data.get('c'))
@@ -86,29 +74,21 @@ async def listen_to_stream(
                                     ]
                                     if len(history_price_currency) == 0:
                                         trend = '⛔'
+                                        percent_change = 0
                                     else:
-                                        if sum(history_price_currency) / len(
+                                        avg_price = sum(
                                             history_price_currency
-                                        ) >= float(data.get('c')):
+                                        ) / len(history_price_currency)
+                                        percent_change = (
+                                            (price_close - avg_price)
+                                            / avg_price
+                                        ) * 100
+                                        if percent_change < 0:
                                             trend = '📉'
-                                            change = sum(
-                                                history_price_currency
-                                            ) / len(
-                                                history_price_currency
-                                            ) - float(
-                                                data.get('c')
-                                            )
-                                            trend += f'{change:.2f}'
                                         else:
                                             trend = '📈'
-                                            change = float(
-                                                data.get('c')
-                                            ) - sum(
-                                                history_price_currency
-                                            ) / len(
-                                                history_price_currency
-                                            )
-                                            trend += f'{change:.2f}'
+
+                                    trend += f'{percent_change:.2f}%'
                                     alert_window.update_data(
                                         name,
                                         event_time,
