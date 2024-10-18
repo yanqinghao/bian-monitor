@@ -32,6 +32,10 @@ class CryptoTop:
         self.tasks = []
         self.proxy_url = 'http://10.33.58.241:1081'
         self.base_streams = ['ethusdt@', 'btcusdt@', 'solusdt@']
+        self.additional_streams = [
+            'dogeusdt@'
+        ]  # DOGE as initial additional stream
+        self.max_additional_streams = 2
         self.stream_options = [
             'aggTrade',
             'kline_1m',
@@ -43,6 +47,8 @@ class CryptoTop:
         self.symbols = [
             'BTCUSDT',
             'ETHUSDT',
+            'SOLUSDT',
+            'DOGEUSDT',
         ]
         self.symbol = 'BTCUSDT'
         self.candles_limit = 1000
@@ -53,15 +59,14 @@ class CryptoTop:
         self.chart_refresh_interval = 3
         self.selected_stream = 'kline_15m'
         self.streams = [
-            f'{i}{self.selected_stream}' for i in self.base_streams
+            f'{i}{self.selected_stream}'
+            for i in self.base_streams + self.additional_streams
         ]
         self.font_size = 10
         self.bg_color = 'black'
         self.history_len = 100
         self.history_price = {
-            'BTCUSDT': deque(maxlen=self.history_len),
-            'ETHUSDT': deque(maxlen=self.history_len),
-            'SOLUSDT': deque(maxlen=self.history_len),
+            symbol: deque(maxlen=self.history_len) for symbol in self.symbols
         }
         self.asyncio_thread = None
         self.running = True
@@ -95,8 +100,8 @@ class CryptoTop:
         stdscr.clear()
         stdscr.refresh()
 
-        self.price_win = curses.newwin(9, 110, 0, 0)
-        self.settings_win = curses.newwin(7, 110, 9, 0)
+        self.price_win = curses.newwin(10, 110, 0, 0)
+        self.settings_win = curses.newwin(9, 110, 10, 0)
 
         self.draw_price_tab()
         self.draw_settings_tab()
@@ -112,16 +117,18 @@ class CryptoTop:
 
         self.price_win.refresh()
 
-    def update_data_display(self):
-        btc_line = f"BTC: Time: {self.history_price['BTCUSDT'][-1]['time'] if self.history_price['BTCUSDT'] else 'N/A'} Price: {self.history_price['BTCUSDT'][-1]['price'] if self.history_price['BTCUSDT'] else 'N/A'} Trend: {self.history_price['BTCUSDT'][-1]['trend'] if self.history_price['BTCUSDT'] else 'N/A'}"
-        eth_line = f"ETH: Time: {self.history_price['ETHUSDT'][-1]['time'] if self.history_price['ETHUSDT'] else 'N/A'} Price: {self.history_price['ETHUSDT'][-1]['price'] if self.history_price['ETHUSDT'] else 'N/A'} Trend: {self.history_price['ETHUSDT'][-1]['trend'] if self.history_price['ETHUSDT'] else 'N/A'}"
-        sol_line = f"SOL: Time: {self.history_price['SOLUSDT'][-1]['time'] if self.history_price['SOLUSDT'] else 'N/A'} Price: {self.history_price['SOLUSDT'][-1]['price'] if self.history_price['SOLUSDT'] else 'N/A'} Trend: {self.history_price['SOLUSDT'][-1]['trend'] if self.history_price['SOLUSDT'] else 'N/A'}"
+    # def update_data_display(self):
+    #     btc_line = f"BTC: Time: {self.history_price['BTCUSDT'][-1]['time'] if self.history_price['BTCUSDT'] else 'N/A'} Price: {self.history_price['BTCUSDT'][-1]['price'] if self.history_price['BTCUSDT'] else 'N/A'} Trend: {self.history_price['BTCUSDT'][-1]['trend'] if self.history_price['BTCUSDT'] else 'N/A'}"
+    #     eth_line = f"ETH: Time: {self.history_price['ETHUSDT'][-1]['time'] if self.history_price['ETHUSDT'] else 'N/A'} Price: {self.history_price['ETHUSDT'][-1]['price'] if self.history_price['ETHUSDT'] else 'N/A'} Trend: {self.history_price['ETHUSDT'][-1]['trend'] if self.history_price['ETHUSDT'] else 'N/A'}"
+    #     sol_line = f"SOL: Time: {self.history_price['SOLUSDT'][-1]['time'] if self.history_price['SOLUSDT'] else 'N/A'} Price: {self.history_price['SOLUSDT'][-1]['price'] if self.history_price['SOLUSDT'] else 'N/A'} Trend: {self.history_price['SOLUSDT'][-1]['trend'] if self.history_price['SOLUSDT'] else 'N/A'}"
+    #     doge_line = f"DOGE: Time: {self.history_price['DOGEUSDT'][-1]['time'] if self.history_price['DOGEUSDT'] else 'N/A'} Price: {self.history_price['DOGEUSDT'][-1]['price'] if self.history_price['DOGEUSDT'] else 'N/A'} Trend: {self.history_price['DOGEUSDT'][-1]['trend'] if self.history_price['DOGEUSDT'] else 'N/A'}"
 
-        self.price_win.addstr(4, 2, btc_line)
-        self.price_win.addstr(5, 2, eth_line)
-        self.price_win.addstr(6, 2, sol_line)
+    #     self.price_win.addstr(4, 2, btc_line)
+    #     self.price_win.addstr(5, 2, eth_line)
+    #     self.price_win.addstr(6, 2, sol_line)
+    #     self.price_win.addstr(7, 2, doge_line)
 
-        self.price_win.refresh()
+    #     self.price_win.refresh()
 
     def update_data(self, name, time, price, trend, price_close=None):
         self.history_price[name].append(
@@ -143,8 +150,68 @@ class CryptoTop:
         self.settings_win.addstr(3, 2, 'Press "p" to change proxy URL')
         self.settings_win.addstr(4, 2, 'Press "m" to change memory length')
         self.settings_win.addstr(5, 2, 'Press "s" to change stream type')
+        self.settings_win.addstr(6, 2, 'Press "a" to add a stream')
+        self.settings_win.addstr(7, 2, 'Press "d" to delete a stream')
 
         self.settings_win.refresh()
+
+    def add_stream(self):
+        if len(self.additional_streams) >= self.max_additional_streams:
+            self.show_error_message(
+                'stream',
+                f'Maximum number of additional streams ({self.max_additional_streams}) reached',
+            )
+            return
+
+        new_stream = self.show_input_screen(
+            'Enter new stream (e.g., xrpusdt@):'
+        ).lower()
+        if (
+            new_stream
+            and new_stream not in self.base_streams
+            and new_stream not in self.additional_streams
+        ):
+            self.additional_streams.append(new_stream)
+            self.symbols.append(new_stream.upper().replace('@', ''))
+            self.history_price[new_stream.upper().replace('@', '')] = deque(
+                maxlen=self.history_len
+            )
+            self.restart_websockets()
+            self.settings_win.addstr(1, 2, f'Stream {new_stream} added')
+        else:
+            self.settings_win.addstr(
+                1, 2, f'Invalid or duplicate stream: {new_stream}'
+            )
+
+        self.return_to_main_screen()
+
+    def delete_stream(self):
+        if not self.additional_streams:
+            self.show_error_message(
+                'stream', 'No additional streams to delete'
+            )
+            return
+
+        stream_to_delete = self.show_input_screen(
+            'Enter stream to delete:'
+        ).lower()
+        if stream_to_delete in self.additional_streams:
+            self.additional_streams.remove(stream_to_delete)
+            symbol_to_remove = stream_to_delete.upper().replace('@', '')
+            self.symbols.remove(symbol_to_remove)
+            del self.history_price[symbol_to_remove]
+            self.restart_websockets()
+            self.settings_win.addstr(
+                1, 2, f'Stream {stream_to_delete} deleted'
+            )
+        else:
+            self.settings_win.addstr(
+                1,
+                2,
+                f'Stream not found or cannot be deleted: {stream_to_delete}',
+            )
+
+        self.return_to_main_screen()
 
     def show_input_screen(self, prompt):
         self.settings_win.clear()
@@ -423,10 +490,12 @@ class CryptoTop:
                 'websocket', f'Error during task cancellation: {e}'
             )
         self.history_price = {
-            'BTCUSDT': deque(maxlen=self.history_len),
-            'ETHUSDT': deque(maxlen=self.history_len),
-            'SOLUSDT': deque(maxlen=self.history_len),
+            symbol: deque(maxlen=self.history_len) for symbol in self.symbols
         }
+        self.streams = [
+            f'{i}{self.selected_stream}'
+            for i in self.base_streams + self.additional_streams
+        ]
         self.start_asyncio_thread()
 
     async def cancel_tasks(self):
@@ -449,6 +518,14 @@ class CryptoTop:
             await asyncio.gather(*tasks)
         except Exception as e:
             self.show_error_message('task', f'Tasks exist with error: {e}')
+
+    def update_data_display(self):
+        for i, symbol in enumerate(self.symbols):
+            if self.history_price[symbol]:
+                line = f"{symbol.replace('USDT', '')}: Time: {self.history_price[symbol][-1]['time']} Price: {self.history_price[symbol][-1]['price']} Trend: {self.history_price[symbol][-1]['trend']}"
+                self.price_win.addstr(4 + i, 2, line)
+
+        self.price_win.refresh()
 
     async def start_candle_listener(self):
         stream_url = f'wss://fstream.binance.com/ws/{self.symbol.lower()}@kline_{self.interval}'

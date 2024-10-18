@@ -25,6 +25,10 @@ def main(stdscr):
                 app.change_history()
             elif c == ord('s'):
                 app.change_stream()
+            elif c == ord('a'):
+                app.add_stream()
+            elif c == ord('d'):
+                app.delete_stream()
 
     # 创建并启动处理输入的线程
     input_thread = threading.Thread(target=handle_input, daemon=True)
