@@ -508,7 +508,7 @@ class CryptoTop:
     def update_data_display(self):
         for i, symbol in enumerate(self.symbols):
             if self.history_price[symbol]:
-                line = f"{symbol.replace('USDT', '')}: Time: {self.history_price[symbol][-1]['time']} Price: {self.history_price[symbol][-1]['price']} Trend: {self.history_price[symbol][-1]['trend']}"
+                line = f"{symbol.replace('USDT', '')}: Time: {self.history_price[symbol][-1]['time']} Price: {self.history_price[symbol][-1]['price']} Trend: {self.history_price[symbol][-1]['trend']}    "
                 self.price_win.addstr(4 + i, 2, line)
 
         self.price_win.refresh()
