@@ -19,7 +19,7 @@ TIMEFRAMES = {
 COMMON_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'DOTUSDT', 'XRPUSDT', 'LINKUSDT', 'LTCUSDT', 'BCHUSDT', 'XLMUSDT']
 
 # Global proxy settings
-PROXY = 'http://127.0.0.1:1088'  # Update this with your actual proxy
+PROXY = os.environ.get('BINANCE_PROXY', None)
 PROXIES = {'http': PROXY, 'https': PROXY}
 
 def get_kline_data(symbol, interval, days):
