@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Kline Data Downloader</title>
+    <script src="axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input, select {
+            padding: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .timeframe-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .timeframe-option {
+            display: flex;
+            align-items: center;
+        }
+        #customSymbolInput {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Binance Kline Data Downloader</h1>
+    <form id="downloadForm">
+        <label for="symbol">Trading Pair:</label>
+        <select id="symbol" name="symbol" required>
+            <option value="">Select a trading pair</option>
+            <option value="custom">Custom</option>
+        </select>
+        <input type="text" id="customSymbolInput" name="customSymbol" placeholder="Enter custom trading pair">
+        
+        <label>Timeframes:</label>
+        <div class="timeframe-options">
+            <div class="timeframe-option">
+                <input type="checkbox" id="1d_30" name="timeframes" value="1d_30" checked>
+                <label for="1d_30">1 day interval for 30 days</label>
+            </div>
+            <div class="timeframe-option">
+                <input type="checkbox" id="4h_7" name="timeframes" value="4h_7" checked>
+                <label for="4h_7">4 hour interval for 7 days</label>
+            </div>
+            <div class="timeframe-option">
+                <input type="checkbox" id="1h_3" name="timeframes" value="1h_3" checked>
+                <label for="1h_3">1 hour interval for 3 days</label>
+            </div>
+            <div class="timeframe-option">
+                <input type="checkbox" id="15m_1" name="timeframes" value="15m_1" checked>
+                <label for="15m_1">15 minute interval for 1 day</label>
+            </div>
+        </div>
+        
+        <button type="submit">Download Data</button>
+    </form>
+
+    <script src="script.js"></script>
+</body>
+</html>
