@@ -143,7 +143,7 @@ class CryptoTop:
         self.settings_win.refresh()
 
     def add_stream(self):
-        if len(self.additional_streams) >= self.max_additional_streams:
+        if len(self.additional_streams) > self.max_additional_streams:
             self.show_error_message(
                 'stream',
                 f'Maximum number of additional streams ({self.max_additional_streams}) reached',
@@ -160,9 +160,10 @@ class CryptoTop:
         ):
             self.additional_streams.append(new_stream)
             self.symbols.append(new_stream.upper().replace('@', ''))
-            self.history_price[new_stream.upper().replace('@', '')] = deque(
-                maxlen=self.history_len
-            )
+            self.history_price = {
+                symbol: deque(maxlen=self.history_len)
+                for symbol in self.symbols
+            }
             self.restart_websockets()
             self.settings_win.addstr(1, 2, f'Stream {new_stream} added')
         else:
