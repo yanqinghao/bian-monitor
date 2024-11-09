@@ -10,6 +10,10 @@ import io
 app = Flask(__name__, static_folder='statics', static_url_path='')
 
 TIMEFRAMES = {
+    '3d_1200': ('3d', 1200),
+    '1d_365': ('1d', 365),
+    '1d_180': ('1d', 180),
+    '1d_90': ('1d', 90),
     '1d_30': ('1d', 30),
     '4h_7': ('4h', 7),
     '1h_3': ('1h', 3),
