@@ -50,6 +50,86 @@
         #customSymbolInput {
             display: none;
         }
+        .analysis-prompt {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .analysis-prompt h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.25rem;
+        }
+
+        .analysis-options {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .analysis-option {
+            background: white;
+            border: 1px solid #cbd5e0;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .analysis-option:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
+
+        .analysis-option.active {
+            background: #4299e1;
+            color: white;
+            border-color: #3182ce;
+        }
+
+        .prompt-text {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            margin-top: 15px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .prompt-text p {
+            margin: 0 0 15px 0;
+        }
+
+        .prompt-text ul {
+            margin: 5px 0 15px 0;
+            padding-left: 20px;
+        }
+
+        .prompt-text li {
+            margin-bottom: 8px;
+        }
+
+        .prompt-text .section {
+            margin-bottom: 20px;
+        }
+
+        .prompt-text .section-title {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .disclaimer {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-top: 10px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -61,7 +141,7 @@
             <option value="custom">Custom</option>
         </select>
         <input type="text" id="customSymbolInput" name="customSymbol" placeholder="Enter custom trading pair">
-        
+
         <label>Timeframes:</label>
         <div class="timeframe-options">
             <div class="timeframe-option">
@@ -97,9 +177,57 @@
                 <label for="15m_1">15 minute interval for 1 day</label>
             </div>
         </div>
-        
+
         <button type="submit">Download Data</button>
     </form>
+
+    <div class="analysis-prompt">
+        <h2>技术分析请求</h2>
+        <!-- <div class="analysis-options">
+            <div class="analysis-option active">综合分析</div>
+            <div class="analysis-option">趋势分析</div>
+            <div class="analysis-option">支阻位分析</div>
+            <div class="analysis-option">交易策略</div>
+        </div> -->
+
+        <div class="prompt-text">
+            <p>尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：</p>
+
+            <div class="section">
+                <div class="section-title">整体趋势研判</div>
+                • 中长期走势研判（趋势/震荡）<br>
+                • 主要趋势阶段位置<br>
+                • 近期趋势延续可能性
+            </div>
+
+            <div class="section">
+                <div class="section-title">技术指标分析</div>
+                • MACD指标：多空动能、背离信号<br>
+                • KDJ指标：超买超卖、金叉死叉<br>
+                • MA均线：多空排列、交叉信号<br>
+                • 成交量：量价关系、资金趋势
+            </div>
+
+            <div class="section">
+                <div class="section-title">重要价位分析</div>
+                • 当前关键支撑位<br>
+                • 主要阻力位置<br>
+                • 突破确认条件
+            </div>
+
+            <div class="section">
+                <div class="section-title">操作建议</div>
+                • 最佳介入价位区间<br>
+                • 止损位建议（风控）<br>
+                • 目标获利位置<br>
+                • 仓位管理策略
+            </div>
+        </div>
+
+        <div class="disclaimer">
+            免责声明：以上分析仅供参考，不构成投资建议。加密货币市场风险较大，请谨慎决策。
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
