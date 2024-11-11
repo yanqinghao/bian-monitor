@@ -130,6 +130,32 @@
             margin-top: 10px;
             font-style: italic;
         }
+        .copy-button {
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 15px;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .copy-button:hover {
+            background-color: #3182ce;
+        }
+
+        .copy-feedback {
+            display: none;
+            color: #38a169;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        #template-container {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -183,12 +209,38 @@
 
     <div class="analysis-prompt">
         <h2>技术分析请求</h2>
+        <button class="copy-button" onclick="copyTemplate()">复制分析模板</button>
+        <span class="copy-feedback" id="copyFeedback">已复制!</span>
         <!-- <div class="analysis-options">
             <div class="analysis-option active">综合分析</div>
             <div class="analysis-option">趋势分析</div>
             <div class="analysis-option">支阻位分析</div>
             <div class="analysis-option">交易策略</div>
         </div> -->
+
+        <div id="template-container">尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：
+
+            整体趋势研判
+            • 中长期走势研判（趋势/震荡）
+            • 主要趋势阶段位置
+            • 近期趋势延续可能性
+
+            技术指标分析
+            • MACD指标：多空动能、背离信号
+            • KDJ指标：超买超卖、金叉死叉
+            • MA均线：多空排列、交叉信号
+            • 成交量：量价关系、资金趋势
+
+            重要价位分析
+            • 当前关键支撑位
+            • 主要阻力位置
+            • 突破确认条件
+
+            操作建议
+            • 最佳介入价位区间
+            • 止损位建议（风控）
+            • 目标获利位置
+            • 仓位管理策略</div>
 
         <div class="prompt-text">
             <p>尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：</p>
@@ -230,5 +282,32 @@
     </div>
 
     <script src="script.js"></script>
+    <script>
+        function copyTemplate() {
+            // 获取模板文本
+            const templateText = document.getElementById('template-container').innerText;
+
+            // 创建临时文本区域
+            const textarea = document.createElement('textarea');
+            textarea.value = templateText;
+            document.body.appendChild(textarea);
+
+            // 选择并复制文本
+            textarea.select();
+            document.execCommand('copy');
+
+            // 移除临时文本区域
+            document.body.removeChild(textarea);
+
+            // 显示反馈信息
+            const feedback = document.getElementById('copyFeedback');
+            feedback.style.display = 'inline';
+
+            // 2秒后隐藏反馈信息
+            setTimeout(() => {
+                feedback.style.display = 'none';
+            }, 2000);
+        }
+    </script>
 </body>
 </html>

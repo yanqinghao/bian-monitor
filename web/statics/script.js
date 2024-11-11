@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('downloadForm').addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         const formData = new FormData(this);
         const symbol = formData.get('symbol') === 'custom' ? formData.get('customSymbol').toUpperCase() : formData.get('symbol');
         formData.set('symbol', symbol);
@@ -62,4 +62,5 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('An error occurred while downloading the data. Please try again.');
         }
     });
+
 });
