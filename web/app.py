@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import tempfile
 import zipfile
 import io
+from auto_analysis import run as run_analysis
 
 app = Flask(__name__, static_folder='statics', static_url_path='')
 
@@ -64,6 +65,11 @@ def create_csv_file(data, symbol, interval, days):
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/analysis/<symbol>', methods=['GET'])
+def analysis(symbol: str):
+    symbol = symbol.upper()
+    return run_analysis(symbol)
 
 @app.route('/download', methods=['POST'])
 def download():

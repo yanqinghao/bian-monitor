@@ -30,7 +30,8 @@ class CryptoTop:
         self.stdscr = stdscr
         self.loop = asyncio.new_event_loop()
         self.tasks = []
-        self.proxy_url = 'http://10.33.58.241:1081'
+        # self.proxy_url = 'http://10.33.58.241:1081'
+        self.proxy_url = ''
         self.base_streams = ['ethusdt@', 'btcusdt@', 'solusdt@']
         self.additional_streams = [
             'dogeusdt@'
