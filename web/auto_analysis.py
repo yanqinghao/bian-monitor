@@ -378,42 +378,53 @@ class CryptoAnalyzer:
         
         def calculate_position_size():
             """计算建议仓位大小"""
-            # 基于波动率和趋势强度
             volatility = df['Close'].pct_change().std() * 100
+            signal_strength = get_signal_strength()
             
+            # 基于信号强度和波动率动态调整仓位
+            if signal_strength < 0.3:  # 弱信号
+                max_position = 20
+                step = 5
+            elif signal_strength < 0.5:  # 中等信号
+                max_position = 30
+                step = 10
+            else:  # 强信号
+                max_position = 40
+                step = 15
+                
+            # 根据波动率调整
             if volatility > 5:
-                return {'max': 30, 'step': 10}  # 高波动低仓位
-            elif volatility > 3:
-                return {'max': 40, 'step': 15}  # 中等波动
-            else:
-                return {'max': 50, 'step': 20}  # 低波动可以较大仓位
+                max_position = max_position * 0.7  # 高波动降低仓位
+                step = step * 0.7
+            
+            return {'max': max_position, 'step': step}
         
         def get_signal_strength():
             """综合计算信号强度"""
             strength = 0
             
             # 1. 趋势判断
-            if trend_stage['momentum'] > 0:
+            if trend_stage['momentum'] < 0:  # 修改动量判断
                 strength += 1
-            if trend_stage['volume_trend'] == '放量':
+            if trend_stage['volume_trend'] == '放量' and trend_stage['momentum'] < 0:
                 strength += 1
                 
             # 2. 技术指标判断
             # MACD
-            if indicators['macd']['hist'].iloc[-1] > 0:
+            if indicators['macd']['hist'].iloc[-1] < 0:  # 修改MACD判断
                 strength += 1
             # KDJ
-            if indicators['kdj']['j'].iloc[-1] > 50:
+            if indicators['kdj']['j'].iloc[-1] < 50:  # 修改KDJ判断
                 strength += 1
             # RSI
-            if indicators['rsi'].iloc[-1] > 50:
+            if indicators['rsi'].iloc[-1] < 50:  # 修改RSI判断
                 strength += 1
             
             # 3. 均线系统
-            ma_cross_up = False
+            ma_cross_down = False
             for period in [5, 10, 20]:
-                if indicators['ma'][f'MA{period}'].iloc[-1] > indicators['ma'][f'MA{period}'].iloc[-2]:
-                    ma_cross_up = True
+                if indicators['ma'][f'MA{period}'].iloc[-1] < indicators['ma'][f'MA{period}'].iloc[-2]:
+                    ma_cross_down = True
                     strength += 0.5
                     
             return strength / 7  # 归一化到0-1之间
@@ -476,15 +487,18 @@ class CryptoAnalyzer:
                         
             return sorted(entries, key=lambda x: x['price'])
         
-        def calculate_stop_loss(side='long'):
-            """计算止损位"""
-            volatility = df['Close'].pct_change().std() * 100
-            atr = df['High'].iloc[-20:].max() - df['Low'].iloc[-20:].min()
-            supports = key_levels['supports']
-            resistances = key_levels['resistances']
+        def calculate_stop_loss(side='long', entry_points=None):
+            """计算止损位置
+            
+            Args:
+                side: 交易方向,'long'或'short'
+                entry_points: 入场点位列表
+            """
+            current_price = df['Close'].iloc[-1]
             
             if side == 'long':
-                # 多头止损
+                # 多头止损逻辑保持不变
+                supports = key_levels['supports']
                 stops = [
                     {
                         'price': supports[0] * 0.98,  # 支撑位下方2%
@@ -498,20 +512,21 @@ class CryptoAnalyzer:
                     }
                 ]
             else:
-                # 空头止损
+                # 空头止损 - 核心修改点
+                # 获取最低入场价
+                min_entry = min([e['price'] for e in entry_points])
                 stops = [
                     {
-                        'price': resistances[0] * 1.02,  # 阻力位上方2%
+                        'price': min_entry * 1.01,  # 入场位上方1%
                         'type': '保守止损',
-                        'risk': f'{((resistances[0] * 1.02 - current_price) / current_price * 100):.1f}%'
+                        'risk': f'{((min_entry * 1.01 - min_entry) / min_entry * 100):.1f}%'
                     },
                     {
-                        'price': max(resistances) * 1.05,  # 最高阻力位上方5%
+                        'price': min_entry * 1.02,  # 入场位上方2%
                         'type': '激进止损',
-                        'risk': f'{((max(resistances) * 1.05 - current_price) / current_price * 100):.1f}%'
+                        'risk': f'{((min_entry * 1.02 - min_entry) / min_entry * 100):.1f}%'
                     }
                 ]
-                
             return stops
         
         # 计算信号强度
@@ -519,32 +534,33 @@ class CryptoAnalyzer:
         
         # 确定交易方向
         if signal_strength > 0.7:
-            direction = 'long'
-            bias = '强烈看多'
-        elif signal_strength > 0.5:
-            direction = 'long'
-            bias = '偏多'
-        elif signal_strength < 0.3:
             direction = 'short'
             bias = '强烈看空'
-        elif signal_strength < 0.5:
+        elif signal_strength > 0.5:
             direction = 'short'
             bias = '偏空'
+        elif signal_strength < 0.3:
+            direction = 'wait'  # 改为观望
+            bias = '信号较弱,建议观望'
         else:
-            direction = 'neutral'
-            bias = '震荡'
+            direction = 'wait'
+            bias = '震荡调整'
             
         # 获取仓位建议
         position = calculate_position_size()
-        
-        # 生成交易建议
+        # 先计算入场点
+        entry_points = calculate_entry_points(side=direction)
+        # 再基于入场点计算止损
+        stops = calculate_stop_loss(side=direction, entry_points=entry_points)
+
+        # 策略整合
         strategy = {
             'bias': bias,
             'direction': direction,
             'signal_strength': f'{signal_strength:.2%}',
             'position': position,
-            'entry_points': calculate_entry_points(direction),
-            'stops': calculate_stop_loss(direction),
+            'entry_points': entry_points,
+            'stops': stops,
             'key_levels': key_levels
         }
         
@@ -730,19 +746,116 @@ class CryptoAnalyzer:
         # except Exception as e:
         #     return f"生成报告出错: {str(e)}"
 
+    def generate_json_data(self):
+        """生成JSON格式的分析数据"""
+        try:
+            # 获取各时间周期数据
+            for interval, info in self.timeframes.items():
+                self.data[interval] = self.get_kline_data(interval, info['days'])
+            
+            # 使用4小时数据计算关键价位
+            key_levels = self.find_key_levels(self.data['4h'])
+            
+            # 生成交易策略
+            strategy = self.analyze_trading_strategy(self.data['4h'], key_levels)
+            
+            # 计算24小时涨跌幅
+            change_24h = self.calculate_24h_change(self.data['1h'])
+            
+            # 当前基础信息
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            symbol_name = self.symbol[:-4] if self.symbol.endswith('USDT') else self.symbol
+            current_price = self.data['4h']['Close'].iloc[-1]
+            
+            # 趋势阶段分析
+            trend_stage = self.analyze_trend_stage(self.data['4h'])
+            
+            # 多周期分析
+            timeframe_analysis = {}
+            for interval, df in self.data.items():
+                indicators = self.calculate_indicators(df)
+                analysis = self.analyze_trend(df, indicators)
+                
+                timeframe_analysis[interval] = {
+                    'period': self.timeframes[interval]['label'],
+                    'ma_trend': analysis['ma_trend'],
+                    'macd': analysis['macd_status'],
+                    'kdj': analysis['kdj_status']
+                }
+
+            # 构建JSON结构
+            json_data = {
+                'basic_info': {
+                    'symbol': f"{symbol_name}/USDT",
+                    'report_time': current_time,
+                    'current_price': float(current_price),
+                    'change_24h': float(change_24h)
+                },
+                'trend_analysis': {
+                    'current_stage': {
+                        'stage': trend_stage['stage'],
+                        'description': trend_stage['description'],
+                        'volume_trend': trend_stage['volume_trend'],
+                        'momentum': float(trend_stage['momentum']),
+                        'volatility': float(trend_stage['volatility'])
+                    },
+                    'timeframe_analysis': timeframe_analysis
+                },
+                'key_levels': {
+                    'resistances': [float(r) for r in key_levels['resistances']],
+                    'supports': [float(s) for s in key_levels['supports']]
+                },
+                'trading_strategy': {
+                    'bias': strategy['bias'],
+                    'direction': strategy['direction'],
+                    'signal_strength': float(strategy['signal_strength'].strip('%'))/100,
+                    'position': strategy['position'],
+                    'entry_points': [{
+                        'price': float(entry['price']),
+                        'type': entry['type'],
+                        'strength': entry['strength']
+                    } for entry in strategy['entry_points']],
+                    'stops': [{
+                        'price': float(stop['price']),
+                        'type': stop['type'],
+                        'risk': stop['risk']
+                    } for stop in strategy['stops']]
+                },
+                'risk_warnings': [
+                    f"当前波动率为 {trend_stage['volatility']:.2f}%，" + 
+                    ("建议降低仓位" if trend_stage['volatility'] > 5 else "波动风险适中"),
+                    "大盘走势可能影响个币表现，注意关注大盘动向",
+                    "建议严格执行止损策略，控制风险",
+                    "不要追高或抄底，耐心等待好的进场点"
+                ]
+            }
+            
+            return json_data
+            
+        except Exception as e:
+            return {
+                'error': True,
+                'message': f"生成JSON数据出错: {str(e)}"
+            }
+
 def main():
-    # try:
-    analyzer = CryptoAnalyzer('DOGEUSDT')
-    report = analyzer.generate_report()
-    print(report)
-    # except Exception as e:
-    #     print(f"程序运行错误: {str(e)}")
+    try:
+        analyzer = CryptoAnalyzer('BTCUSDT')
+        report = analyzer.generate_json_data()
+        print(report)
+    except Exception as e:
+        print(f"程序运行错误: {str(e)}")
 
 def run(symbol):
-    # try:
-    analyzer = CryptoAnalyzer(symbol)
-    report = analyzer.generate_report()
-    return report
+    try:
+        analyzer = CryptoAnalyzer(symbol)
+        json_data = analyzer.generate_json_data()
+        return json_data
+    except Exception as e:
+        return {
+            'error': True,
+            'message': f"运行分析出错: {str(e)}"
+        }
 
 if __name__ == '__main__':
     main()
