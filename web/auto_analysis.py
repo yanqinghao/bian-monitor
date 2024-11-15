@@ -424,186 +424,628 @@ class CryptoAnalyzer:
             else '平稳',
         }
 
+    def calculate_volatility_metrics(self, df):
+        """计算波动率相关指标"""
+        # 在class CryptoAnalyzer下增加此函数
+        returns = df['Close'].pct_change()
+        atr = self.calculate_atr(df)
+
+        return {
+            'returns_volatility': returns.std() * 100,
+            'atr': atr,
+            'atr_percent': (atr / df['Close'].mean()) * 100,
+        }
+
+    def calculate_atr(self, df, period=14):
+        """计算ATR"""
+        # 在class CryptoAnalyzer下增加此函数
+        high_low = df['High'] - df['Low']
+        high_close = abs(df['High'] - df['Close'].shift())
+        low_close = abs(df['Low'] - df['Close'].shift())
+
+        ranges = pd.concat([high_low, high_close, low_close], axis=1)
+        true_range = ranges.max(axis=1)
+        atr = true_range.rolling(period).mean()
+
+        return atr
+
+    def analyze_volume_pattern(self, df):
+        """分析成交量模式"""
+        # 在class CryptoAnalyzer下增加此函数
+        volume_ma = df['Volume'].rolling(20).mean()
+        recent_volume = df['Volume'].tail(5).mean()
+        volume_ratio = recent_volume / volume_ma.iloc[-1]
+
+        volume_trend = pd.Series(df['Volume']).diff()
+        volume_acceleration = volume_trend.diff()
+
+        return {
+            'volume_ma_ratio': volume_ratio,
+            'volume_trend': 'up' if volume_trend.iloc[-1] > 0 else 'down',
+            'volume_acceleration': volume_acceleration.iloc[-1],
+            'is_volume_expanding': volume_ratio > 1.2,
+        }
+
     def analyze_trading_strategy(self, df, key_levels):
         """生成交易策略建议"""
-        current_price = df['Close'].iloc[-1]
-        indicators = self.calculate_indicators(df)
+        # current_price = df['Close'].iloc[-1]
+        # indicators = self.calculate_indicators(df)
         trend_stage = self.analyze_trend_stage(df)
 
         def calculate_position_size():
-            """计算建议仓位大小"""
-            volatility = df['Close'].pct_change().std() * 100
+            """优化后的仓位计算"""
+            # 修改 analyze_trading_strategy 方法中的 calculate_position_size 函数
+
+            volatility = self.calculate_volatility_metrics(self.data['4h'])
+            vol_pattern = self.analyze_volume_pattern(self.data['4h'])
+
+            # 基础仓位设置
+            base_position = {
+                'aggressive': {'max': 50, 'step': 20},
+                'moderate': {'max': 40, 'step': 15},
+                'conservative': {'max': 30, 'step': 10},
+            }
+
+            # 风险评分
+            risk_score = 0
+
+            # 波动率评分
+            if volatility['returns_volatility'] < 3:
+                risk_score += 3
+            elif volatility['returns_volatility'] < 5:
+                risk_score += 2
+            else:
+                risk_score += 1
+
+            # 趋势强度评分
+            if abs(trend_stage['momentum']) > 2:
+                risk_score += 3
+            elif abs(trend_stage['momentum']) > 1:
+                risk_score += 2
+            else:
+                risk_score += 1
+
+            # 成交量评分
+            if vol_pattern['is_volume_expanding']:
+                risk_score += 2
+            else:
+                risk_score += 1
+
+            # 选择仓位策略
+            if risk_score >= 7:
+                position = base_position['aggressive'].copy()
+            elif risk_score >= 5:
+                position = base_position['moderate'].copy()
+            else:
+                position = base_position['conservative'].copy()
+
+            # 动态调整
             signal_strength = get_signal_strength()
+            if signal_strength < 0.5:
+                position['max'] = int(position['max'] * 0.8)
+                position['step'] = int(position['step'] * 0.8)
 
-            # 基于信号强度和波动率动态调整仓位
-            if signal_strength < 0.3:  # 弱信号
-                max_position = 20
-                step = 5
-            elif signal_strength < 0.5:  # 中等信号
-                max_position = 30
-                step = 10
-            else:  # 强信号
-                max_position = 40
-                step = 15
-
-            # 根据波动率调整
-            if volatility > 5:
-                max_position = max_position * 0.7  # 高波动降低仓位
-                step = step * 0.7
-
-            return {'max': max_position, 'step': step}
+            return position
 
         def get_signal_strength():
-            """综合计算信号强度"""
-            strength = 0
+            """优化后的信号强度计算"""
+            # 修改 analyze_trading_strategy 方法中的 get_signal_strength 函数
 
-            # 1. 趋势判断
-            if trend_stage['momentum'] < 0:  # 修改动量判断
-                strength += 1
+            # 获取技术指标数据
+            indicators = self.calculate_indicators(self.data['4h'])
+            vol_metrics = self.analyze_volume_pattern(self.data['4h'])
+            volatility = self.calculate_volatility_metrics(self.data['4h'])
+
+            weights = {
+                'trend': 0.3,
+                'technical': 0.3,
+                'volume': 0.2,
+                'price': 0.2,
+            }
+
+            # 趋势得分
+            trend_score = 0
+            if trend_stage['momentum'] < 0:
+                trend_score += 0.6
             if (
-                trend_stage['volume_trend'] == '放量'
+                vol_metrics['volume_ma_ratio'] > 1.2
                 and trend_stage['momentum'] < 0
             ):
-                strength += 1
+                trend_score += 0.4
 
-            # 2. 技术指标判断
-            # MACD
-            if indicators['macd']['hist'].iloc[-1] < 0:  # 修改MACD判断
-                strength += 1
-            # KDJ
-            if indicators['kdj']['j'].iloc[-1] < 50:  # 修改KDJ判断
-                strength += 1
-            # RSI
-            if indicators['rsi'].iloc[-1] < 50:  # 修改RSI判断
-                strength += 1
+            # 技术指标得分
+            tech_score = 0
+            if indicators['macd']['hist'].iloc[-1] < 0:
+                tech_score += 0.3
+            if indicators['kdj']['j'].iloc[-1] > 80:
+                tech_score += 0.4
+            if indicators['rsi'].iloc[-1] > 70:
+                tech_score += 0.3
 
-            # 3. 均线系统
-            # ma_cross_down = False
-            for period in [5, 10, 20]:
-                if (
-                    indicators['ma'][f'MA{period}'].iloc[-1]
-                    < indicators['ma'][f'MA{period}'].iloc[-2]
-                ):
-                    # ma_cross_down = True
-                    strength += 0.5
+            # 成交量得分
+            volume_score = 0
+            if vol_metrics['volume_ma_ratio'] < 0.8:
+                volume_score += 0.5
+            if vol_metrics['volume_trend'] == 'up':
+                volume_score += 0.5
 
-            return strength / 7  # 归一化到0-1之间
+            # 价格结构得分
+            price_score = 0
+            current_price = self.data['4h']['Close'].iloc[-1]
+            if current_price > indicators['ma']['MA20'].iloc[-1]:
+                price_score += 0.5
+            if volatility['returns_volatility'] > 5:
+                price_score += 0.5
 
-        def calculate_entry_points(side='long'):
-            """计算入场点位"""
-            supports = key_levels['supports']
-            resistances = key_levels['resistances']
+            final_score = (
+                trend_score * weights['trend']
+                + tech_score * weights['technical']
+                + volume_score * weights['volume']
+                + price_score * weights['price']
+            )
+
+            return final_score
+
+        def calculate_entry_points(side='short'):
+            """优化后的入场点计算，包含多空双向"""
+            # 修改 analyze_trading_strategy 方法中的 calculate_entry_points 函数
+
+            current_price = self.data['4h']['Close'].iloc[-1]
+            volatility = self.calculate_volatility_metrics(self.data['4h'])
+            vol_pattern = self.analyze_volume_pattern(self.data['4h'])
+            indicators = self.calculate_indicators(self.data['4h'])
+
             entries = []
 
-            if side == 'long':
-                # 多头入场点
-                # 1. 支撑位附近
-                for support in supports:
-                    entries.append(
-                        {
-                            'price': support,
-                            'type': '支撑位买入',
-                            'strength': '强'
-                            if support > indicators['ma']['MA20'].iloc[-1]
-                            else '中',
-                        }
+            if side == 'short':
+                # 阻力位做空
+                for resistance in key_levels['resistances']:
+                    strength = (
+                        'strong'
+                        if indicators['rsi'].iloc[-1] > 70
+                        else 'medium'
+                    )
+                    confidence = (
+                        'high'
+                        if vol_pattern['is_volume_expanding']
+                        else 'medium'
                     )
 
-                # 2. 回调买入点
-                pullback_levels = [
-                    current_price * 0.98,  # 2%回调
-                    current_price * 0.95,  # 5%回调
-                    current_price * 0.93,  # 7%回调
-                ]
+                    entry = {
+                        'price': resistance,
+                        'type': '阻力位做空',
+                        'strength': strength,
+                        'confidence': confidence,
+                        'risk_ratio': 1.5 if strength == 'strong' else 1.2,
+                    }
+                    entries.append(entry)
 
-                for level in pullback_levels:
-                    if level > supports[-1]:  # 确保在最低支撑位之上
-                        entries.append(
-                            {'price': level, 'type': '回调买入', 'strength': '中'}
-                        )
-
-            else:
-                # 空头入场点
-                # 1. 阻力位附近
-                for resistance in resistances:
-                    entries.append(
-                        {
-                            'price': resistance,
-                            'type': '阻力位做空',
-                            'strength': '强'
-                            if resistance < indicators['ma']['MA20'].iloc[-1]
-                            else '中',
-                        }
-                    )
-
-                # 2. 反弹做空点
+                # 反弹做空点
                 bounce_levels = [
-                    current_price * 1.02,  # 2%反弹
-                    current_price * 1.05,  # 5%反弹
-                    current_price * 1.07,  # 7%反弹
+                    current_price * (1 + volatility['atr_percent'] / 100),
+                    current_price * (1 + volatility['atr_percent'] / 100 * 2),
                 ]
 
                 for level in bounce_levels:
-                    if level < resistances[-1]:  # 确保在最高阻力位之下
-                        entries.append(
-                            {'price': level, 'type': '反弹做空', 'strength': '中'}
-                        )
+                    if level < max(key_levels['resistances']):
+                        entry = {
+                            'price': level,
+                            'type': '反弹做空',
+                            'strength': 'medium',
+                            'confidence': 'medium',
+                            'risk_ratio': 1.2,
+                        }
+                        entries.append(entry)
 
-            return sorted(entries, key=lambda x: x['price'])
-
-        def calculate_stop_loss(side='long', entry_points=None):
-            """计算止损位置
-
-            Args:
-                side: 交易方向,'long'或'short'
-                entry_points: 入场点位列表
-            """
-            current_price = df['Close'].iloc[-1]
-
-            if side == 'long':
-                # 多头止损逻辑保持不变
-                supports = key_levels['supports']
-                stops = [
-                    {
-                        'price': supports[0] * 0.98,  # 支撑位下方2%
-                        'type': '保守止损',
-                        'risk': f'{((current_price - supports[0] * 0.98) / current_price * 100):.1f}%',
-                    },
-                    {
-                        'price': min(supports) * 0.95,  # 最低支撑位下方5%
-                        'type': '激进止损',
-                        'risk': f'{((current_price - min(supports) * 0.95) / current_price * 100):.1f}%',
-                    },
-                ]
-            else:
-                # 空头止损 - 使用最高入场价计算
-                max_entry = max([e['price'] for e in entry_points])
-
-                # 为每个入场点计算对应的止损价位
-                entry_stops = []
-                for entry in entry_points:
-                    entry_price = entry['price']
-                    stop_price = entry_price * 1.01  # 入场价上方1%
-                    risk_percent = (
-                        (stop_price - entry_price) / entry_price * 100
+            elif side == 'long':
+                # 支撑位做多
+                for support in key_levels['supports']:
+                    strength = (
+                        'strong'
+                        if indicators['rsi'].iloc[-1] < 30
+                        else 'medium'
                     )
-                    entry_stops.append(
+                    confidence = (
+                        'high'
+                        if vol_pattern['is_volume_expanding']
+                        else 'medium'
+                    )
+
+                    entry = {
+                        'price': support,
+                        'type': '支撑位做多',
+                        'strength': strength,
+                        'confidence': confidence,
+                        'risk_ratio': 1.5 if strength == 'strong' else 1.2,
+                    }
+                    entries.append(entry)
+
+                # 回调做多点
+                pullback_levels = [
+                    current_price * (1 - volatility['atr_percent'] / 100),
+                    current_price * (1 - volatility['atr_percent'] / 100 * 2),
+                ]
+
+                for level in pullback_levels:
+                    if level > min(key_levels['supports']):
+                        entry = {
+                            'price': level,
+                            'type': '回调做多',
+                            'strength': 'medium',
+                            'confidence': 'medium',
+                            'risk_ratio': 1.2,
+                        }
+                        entries.append(entry)
+
+                # 均线支撑位做多
+                ma_supports = []
+                for period in [20, 50]:
+                    ma_price = indicators['ma'][f'MA{period}'].iloc[-1]
+                    if ma_price < current_price:
+                        ma_supports.append(
+                            {
+                                'price': ma_price,
+                                'type': f'MA{period}支撑做多',
+                                'strength': 'medium',
+                                'confidence': 'medium',
+                                'risk_ratio': 1.2,
+                            }
+                        )
+                entries.extend(ma_supports)
+            else:
+                # 突破做多机会
+                for resistance in key_levels['resistances']:
+                    if resistance > current_price:
+                        entry = {
+                            'price': resistance,
+                            'type': '突破做多',
+                            'strength': 'medium',
+                            'confidence': 'waiting',
+                            'risk_ratio': 1.2,
+                            'condition': f'价格突破{resistance}并有效确认后',
+                        }
+                        entries.append(entry)
+
+                # 回调做多机会
+                for support in key_levels['supports']:
+                    if support < current_price:
+                        entry = {
+                            'price': support,
+                            'type': '回调做多',
+                            'strength': 'medium',
+                            'confidence': 'waiting',
+                            'risk_ratio': 1.2,
+                            'condition': f'价格回调到{support}获得支撑后',
+                        }
+                        entries.append(entry)
+
+                # 震荡区间交易机会
+                range_high = min(key_levels['resistances'])
+                range_low = max(key_levels['supports'])
+                current_atr = volatility['atr'].iloc[-1]  # 获取最新的ATR值
+                if range_high - range_low > current_atr * 2:  # 确保区间足够大
+                    entries.extend(
+                        [
+                            {
+                                'price': range_low,
+                                'type': '区间下沿做多',
+                                'strength': 'medium',
+                                'confidence': 'waiting',
+                                'risk_ratio': 1.2,
+                                'condition': f'价格在{range_low}获得支撑并出现反转信号',
+                            },
+                            {
+                                'price': range_high,
+                                'type': '区间上沿做空',
+                                'strength': 'medium',
+                                'confidence': 'waiting',
+                                'risk_ratio': 1.2,
+                                'condition': f'价格在{range_high}遇阻并出现反转信号',
+                            },
+                        ]
+                    )
+
+                # 均线交叉机会
+                ma20 = indicators['ma']['MA20'].iloc[-1]
+                ma60 = indicators['ma']['MA60'].iloc[-1]
+                if abs(ma20 - ma60) / ma20 < 0.01:  # 均线即将交叉
+                    entries.append(
                         {
-                            'price': stop_price,
-                            'type': f'止损 (入场价: {entry_price:.2f})',
-                            'risk': f'{risk_percent:.1f}%',
+                            'price': current_price,
+                            'type': '均线交叉信号',
+                            'strength': 'medium',
+                            'confidence': 'waiting',
+                            'risk_ratio': 1.2,
+                            'condition': 'MA20和MA50发生金叉/死叉且成交量配合',
                         }
                     )
 
-                # 同时保留一个基于最高入场价的保守止损
-                conservative_stop = {
-                    'price': max_entry * 1.02,  # 最高入场价上方2%
-                    'type': '全局止损',
-                    'risk': f'{((max_entry * 1.02 - max_entry) / max_entry * 100):.1f}%',
+            # 根据趋势强度和价格位置筛选最佳入场点
+            filtered_entries = []
+            trend_strength = abs(trend_stage['momentum'])
+
+            for entry in entries:
+                # 计算价格与当前价的距离
+                price_distance = (
+                    abs(entry['price'] - current_price) / current_price
+                )
+
+                # 根据趋势强度调整可接受的价格距离
+                max_distance = 0.05 if trend_strength > 2 else 0.03
+
+                if price_distance <= max_distance:
+                    # 计算综合得分
+                    score = 0
+                    score += 0.4 if entry['strength'] == 'strong' else 0.2
+                    score += 0.4 if entry['confidence'] == 'high' else 0.2
+                    score += 0.2 if entry['risk_ratio'] >= 1.5 else 0.1
+
+                    entry['score'] = score
+                    filtered_entries.append(entry)
+
+            # 按得分和价格排序
+            if side == 'long':
+                filtered_entries.sort(key=lambda x: (-x['score'], x['price']))
+            else:
+                filtered_entries.sort(key=lambda x: (-x['score'], -x['price']))
+
+            return filtered_entries[:3]  # 返回得分最高的3个入场点
+
+        def calculate_stop_loss(side='short', entry_points=None):
+            """优化后的止损计算，包含多空双向"""
+            # 修改 analyze_trading_strategy 方法中的 calculate_stop_loss 函数
+
+            volatility = self.calculate_volatility_metrics(self.data['4h'])
+            indicators = self.calculate_indicators(self.data['4h'])
+
+            stops = []
+
+            if side == 'short':
+                max_entry = max([e['price'] for e in entry_points])
+
+                # 为每个入场点计算动态止损
+                for entry in entry_points:
+                    entry_price = entry['price']
+
+                    # ATR止损
+                    atr_stop = entry_price * (
+                        1 + volatility['atr_percent'] / 100 * 2
+                    )
+
+                    # 波动率止损
+                    vol_stop = entry_price * (
+                        1 + volatility['returns_volatility'] / 100
+                    )
+
+                    # 技术指标止损 (如果RSI过低则收紧止损)
+                    tech_stop = entry_price * (
+                        1
+                        + (0.015 if indicators['rsi'].iloc[-1] < 30 else 0.02)
+                    )
+
+                    # 取较小的止损位
+                    stop_price = min(atr_stop, vol_stop, tech_stop)
+
+                    stops.append(
+                        {
+                            'price': stop_price,
+                            'type': f'动态止损 (入场价: {entry_price:.2f})',
+                            'risk': f'{((stop_price - entry_price) / entry_price * 100):.1f}%',
+                        }
+                    )
+
+                # 全局止损
+                global_stop = max_entry * (
+                    1 + max(volatility['returns_volatility'] / 100 * 1.5, 0.02)
+                )
+                stops.append(
+                    {
+                        'price': global_stop,
+                        'type': '全局止损',
+                        'risk': f'{((global_stop - max_entry) / max_entry * 100):.1f}%',
+                    }
+                )
+
+            elif side == 'long':
+                min_entry = min([e['price'] for e in entry_points])
+
+                # 为每个入场点计算动态止损
+                for entry in entry_points:
+                    entry_price = entry['price']
+
+                    # ATR止损
+                    atr_stop = entry_price * (
+                        1 - volatility['atr_percent'] / 100 * 2
+                    )
+
+                    # 波动率止损
+                    vol_stop = entry_price * (
+                        1 - volatility['returns_volatility'] / 100
+                    )
+
+                    # 技术指标止损 (如果RSI过高则收紧止损)
+                    tech_stop = entry_price * (
+                        1
+                        - (0.015 if indicators['rsi'].iloc[-1] > 70 else 0.02)
+                    )
+
+                    # 取较大的止损位
+                    stop_price = max(atr_stop, vol_stop, tech_stop)
+
+                    # 确保止损不会低于最近支撑位
+                    nearest_support = max(
+                        [s for s in key_levels['supports'] if s < entry_price],
+                        default=stop_price,
+                    )
+                    stop_price = max(
+                        stop_price, nearest_support * 0.995
+                    )  # 支撑位下方0.5%
+
+                    stops.append(
+                        {
+                            'price': stop_price,
+                            'type': f'动态止损 (入场价: {entry_price:.2f})',
+                            'risk': f'{((entry_price - stop_price) / entry_price * 100):.1f}%',
+                        }
+                    )
+
+                # 全局止损
+                global_stop = min_entry * (
+                    1 - max(volatility['returns_volatility'] / 100 * 1.5, 0.02)
+                )
+
+                # 确保全局止损不会太低
+                lowest_support = min(key_levels['supports'])
+                global_stop = max(
+                    global_stop, lowest_support * 0.99
+                )  # 最低支撑位下方1%
+
+                stops.append(
+                    {
+                        'price': global_stop,
+                        'type': '全局止损',
+                        'risk': f'{((min_entry - global_stop) / min_entry * 100):.1f}%',
+                    }
+                )
+
+            else:
+                # 为每个潜在入场点计算预设止损
+                stops = []
+                for entry in entry_points:
+                    if '做多' in entry['type']:
+                        # 计算做多的预设止损
+                        stop_price = entry['price'] * (
+                            1 - volatility['atr_percent'] / 100 * 1.5
+                        )
+                        # 确保止损在最近支撑位下方
+                        nearest_support = max(
+                            [
+                                s
+                                for s in key_levels['supports']
+                                if s < entry['price']
+                            ],
+                            default=stop_price,
+                        )
+                        current_stop = (
+                            stop_price.iloc[-1]
+                            if isinstance(stop_price, pd.Series)
+                            else stop_price
+                        )  # 取最新值
+                        final_stop = max(current_stop, nearest_support * 0.995)
+
+                        stops.append(
+                            {
+                                'entry_price': entry['price'],
+                                'stop_price': final_stop,
+                                'type': f"预设止损 ({entry['type']})",
+                                'risk': f'{((entry["price"] - final_stop) / entry["price"] * 100):.1f}%',
+                                'condition': entry['condition'],
+                                'trigger_rules': [
+                                    '确认突破后入场',
+                                    '等待回抽确认支撑',
+                                    '观察成交量配合',
+                                    '关注技术指标背离',
+                                ],
+                            }
+                        )
+
+                    elif '做空' in entry['type']:
+                        # 计算做空的预设止损
+                        stop_price = entry['price'] * (
+                            1 + volatility['atr_percent'] / 100 * 1.5
+                        )
+                        # 确保止损在最近阻力位上方
+                        nearest_resistance = min(
+                            [
+                                r
+                                for r in key_levels['resistances']
+                                if r > entry['price']
+                            ],
+                            default=stop_price,
+                        )
+                        current_stop = (
+                            stop_price.iloc[-1]
+                            if isinstance(stop_price, pd.Series)
+                            else stop_price
+                        )  # 取最新值
+                        final_stop = min(
+                            current_stop, nearest_resistance * 1.005
+                        )
+
+                        stops.append(
+                            {
+                                'entry_price': entry['price'],
+                                'stop_price': final_stop,
+                                'type': f"预设止损 ({entry['type']})",
+                                'risk': f'{((final_stop - entry["price"]) / entry["price"] * 100):.1f}%',
+                                'condition': entry['condition'],
+                                'trigger_rules': [
+                                    '确认阻力后入场',
+                                    '等待反弹确认阻力',
+                                    '观察成交量配合',
+                                    '关注技术指标背离',
+                                ],
+                            }
+                        )
+
+                # 添加观望期建议
+                wait_suggestions = {
+                    'waiting_conditions': [
+                        '等待价格运行至关键支撑位或阻力位',
+                        '等待均线系统形成明确方向',
+                        'KDJ、RSI等指标出现超买超卖信号',
+                        'MACD形成明确的金叉或死叉',
+                        '成交量出现明显放大',
+                    ],
+                    'entry_confirmation': [
+                        '价格突破需要放量确认',
+                        '关键位置需要观察至少2个K线确认',
+                        '建议使用小仓位试探性入场',
+                        '入场后及时设置止损保护',
+                    ],
                 }
 
-                stops = entry_stops + [conservative_stop]
-            return stops
+                return {
+                    'potential_stops': stops,
+                    'wait_suggestions': wait_suggestions,
+                }
+
+            # 添加移动止损建议
+            if side == 'long':
+                moving_stop = {
+                    'initial': min([stop['price'] for stop in stops]),
+                    'rules': [
+                        '盈利1%时，将止损提升至成本价',
+                        '盈利2%时，将止损提升至成本价上方0.5%',
+                        '盈利3%时，将止损提升至成本价上方1%',
+                        '后续每上涨1%，相应提升止损0.5%',
+                    ],
+                }
+            else:
+                moving_stop = {
+                    'initial': max([stop['price'] for stop in stops]),
+                    'rules': [
+                        '盈利1%时，将止损下调至成本价',
+                        '盈利2%时，将止损下调至成本价下方0.5%',
+                        '盈利3%时，将止损下调至成本价下方1%',
+                        '后续每下跌1%，相应下调止损0.5%',
+                    ],
+                }
+
+            stops.append(
+                {
+                    'type': '移动止损建议',
+                    'rules': moving_stop['rules'],
+                    'initial_price': moving_stop['initial'],
+                }
+            )
+
+            return {
+                'fixed_stops': [
+                    stop for stop in stops if stop['type'] != '移动止损建议'
+                ],
+                'moving_stop': moving_stop,
+            }
 
         # 计算信号强度
         signal_strength = get_signal_strength()
@@ -629,16 +1071,51 @@ class CryptoAnalyzer:
         # 再基于入场点计算止损
         stops = calculate_stop_loss(side=direction, entry_points=entry_points)
 
-        # 策略整合
-        strategy = {
-            'bias': bias,
-            'direction': direction,
-            'signal_strength': f'{signal_strength:.2%}',
-            'position': position,
-            'entry_points': entry_points,
-            'stops': stops,
-            'key_levels': key_levels,
-        }
+        if direction == 'wait':
+            # 获取潜在入场点
+            potential_entries = calculate_entry_points('wait')
+            # 获取潜在止损点
+            potential_stops = calculate_stop_loss('wait', potential_entries)
+
+            # 转换格式以适配现有数据结构
+            entry_points = [
+                {
+                    'price': entry['price'],
+                    'type': f"潜在{entry['type']} ({entry['condition']})",  # 合并condition到type中
+                    'strength': entry['strength'],
+                }
+                for entry in potential_entries
+            ]
+
+            stops = [
+                {
+                    'price': stop['stop_price'],  # 使用预设的止损价格
+                    'type': stop['type'],
+                    'risk': stop['risk'],
+                }
+                for stop in potential_stops.get('potential_stops', [])
+            ]
+
+            # 构建符合原有格式的策略数据
+            strategy = {
+                'bias': '建议观望',
+                'direction': direction,
+                'signal_strength': f'{signal_strength:.2%}',
+                'position': {'max': 0, 'step': 0},  # 观望时建议仓位为0
+                'entry_points': entry_points,
+                'stops': stops,
+            }
+        else:
+            # 策略整合
+            strategy = {
+                'bias': bias,
+                'direction': direction,
+                'signal_strength': f'{signal_strength:.2%}',
+                'position': position,
+                'entry_points': entry_points,
+                'stops': stops,
+                'key_levels': key_levels,
+            }
 
         return strategy
 
@@ -693,23 +1170,23 @@ class CryptoAnalyzer:
 
     def calculate_24h_change(self, df):
         """改进后的24小时涨跌幅计算"""
-        try:
-            # 获取24小时前的价格
-            price_24h_ago = None
-            for i in range(len(df) - 1, -1, -1):
-                if df.index[i] <= df.index[-1] - pd.Timedelta(hours=24):
-                    price_24h_ago = df['Close'][i]
-                    break
+        # try:
+        # 获取24小时前的价格
+        price_24h_ago = None
+        for i in range(len(df) - 1, -1, -1):
+            if df.index[i] <= df.index[-1] - pd.Timedelta(hours=24):
+                price_24h_ago = df['Close'][i]
+                break
 
-            if price_24h_ago is None:
-                return 0
-
-            current_price = df['Close'].iloc[-1]
-            change_24h = ((current_price / price_24h_ago) - 1) * 100
-            return change_24h
-
-        except Exception:
+        if price_24h_ago is None:
             return 0
+
+        current_price = df['Close'].iloc[-1]
+        change_24h = ((current_price / price_24h_ago) - 1) * 100
+        return change_24h
+
+        # except Exception:
+        #     return 0
 
     def generate_report(self):
         """生成完整的分析报告"""
@@ -847,122 +1324,111 @@ class CryptoAnalyzer:
 
     def generate_json_data(self):
         """生成JSON格式的分析数据"""
-        try:
-            # 获取各时间周期数据
-            for interval, info in self.timeframes.items():
-                self.data[interval] = self.get_kline_data(
-                    interval, info['days']
-                )
+        # try:
+        # 获取各时间周期数据
+        for interval, info in self.timeframes.items():
+            self.data[interval] = self.get_kline_data(interval, info['days'])
 
-            # 使用4小时数据计算关键价位
-            key_levels = self.find_key_levels(self.data['4h'])
+        # 使用4小时数据计算关键价位
+        key_levels = self.find_key_levels(self.data['4h'])
 
-            # 生成交易策略
-            strategy = self.analyze_trading_strategy(
-                self.data['4h'], key_levels
-            )
+        # 生成交易策略
+        strategy = self.analyze_trading_strategy(self.data['4h'], key_levels)
 
-            # 计算24小时涨跌幅
-            change_24h = self.calculate_24h_change(self.data['1h'])
+        # 计算24小时涨跌幅
+        change_24h = self.calculate_24h_change(self.data['1h'])
 
-            # 当前基础信息
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            symbol_name = (
-                self.symbol[:-4]
-                if self.symbol.endswith('USDT')
-                else self.symbol
-            )
-            current_price = self.data['4h']['Close'].iloc[-1]
+        # 当前基础信息
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        symbol_name = (
+            self.symbol[:-4] if self.symbol.endswith('USDT') else self.symbol
+        )
+        current_price = self.data['4h']['Close'].iloc[-1]
 
-            # 趋势阶段分析
-            trend_stage = self.analyze_trend_stage(self.data['4h'])
+        # 趋势阶段分析
+        trend_stage = self.analyze_trend_stage(self.data['4h'])
 
-            # 多周期分析
-            timeframe_analysis = {}
-            for interval, df in self.data.items():
-                indicators = self.calculate_indicators(df)
-                analysis = self.analyze_trend(df, indicators)
+        # 多周期分析
+        timeframe_analysis = {}
+        for interval, df in self.data.items():
+            indicators = self.calculate_indicators(df)
+            analysis = self.analyze_trend(df, indicators)
 
-                timeframe_analysis[interval] = {
-                    'period': self.timeframes[interval]['label'],
-                    'ma_trend': analysis['ma_trend'],
-                    'macd': analysis['macd_status'],
-                    'kdj': analysis['kdj_status'],
-                }
-
-            # 构建JSON结构
-            json_data = {
-                'basic_info': {
-                    'symbol': f'{symbol_name}/USDT',
-                    'report_time': current_time,
-                    'current_price': float(current_price),
-                    'change_24h': float(change_24h),
-                },
-                'trend_analysis': {
-                    'current_stage': {
-                        'stage': trend_stage['stage'],
-                        'description': trend_stage['description'],
-                        'volume_trend': trend_stage['volume_trend'],
-                        'momentum': float(trend_stage['momentum']),
-                        'volatility': float(trend_stage['volatility']),
-                    },
-                    'timeframe_analysis': timeframe_analysis,
-                },
-                'key_levels': {
-                    'resistances': [
-                        float(r) for r in key_levels['resistances']
-                    ],
-                    'supports': [float(s) for s in key_levels['supports']],
-                },
-                'trading_strategy': {
-                    'bias': strategy['bias'],
-                    'direction': strategy['direction'],
-                    'signal_strength': float(
-                        strategy['signal_strength'].strip('%')
-                    )
-                    / 100,
-                    'position': strategy['position'],
-                    'entry_points': [
-                        {
-                            'price': float(entry['price']),
-                            'type': entry['type'],
-                            'strength': entry['strength'],
-                        }
-                        for entry in strategy['entry_points']
-                    ],
-                    'stops': [
-                        {
-                            'price': float(stop['price']),
-                            'type': stop['type'],
-                            'risk': stop['risk'],
-                        }
-                        for stop in strategy['stops']
-                    ],
-                },
-                'risk_warnings': [
-                    f"当前波动率为 {trend_stage['volatility']:.2f}%，"
-                    + (
-                        '建议降低仓位' if trend_stage['volatility'] > 5 else '波动风险适中'
-                    ),
-                    '大盘走势可能影响个币表现，注意关注大盘动向',
-                    '建议严格执行止损策略，控制风险',
-                    '不要追高或抄底，耐心等待好的进场点',
-                ],
+            timeframe_analysis[interval] = {
+                'period': self.timeframes[interval]['label'],
+                'ma_trend': analysis['ma_trend'],
+                'macd': analysis['macd_status'],
+                'kdj': analysis['kdj_status'],
             }
+        # 构建JSON结构
+        json_data = {
+            'basic_info': {
+                'symbol': f'{symbol_name}/USDT',
+                'report_time': current_time,
+                'current_price': float(current_price),
+                'change_24h': float(change_24h),
+            },
+            'trend_analysis': {
+                'current_stage': {
+                    'stage': trend_stage['stage'],
+                    'description': trend_stage['description'],
+                    'volume_trend': trend_stage['volume_trend'],
+                    'momentum': float(trend_stage['momentum']),
+                    'volatility': float(trend_stage['volatility']),
+                },
+                'timeframe_analysis': timeframe_analysis,
+            },
+            'key_levels': {
+                'resistances': [float(r) for r in key_levels['resistances']],
+                'supports': [float(s) for s in key_levels['supports']],
+            },
+            'trading_strategy': {
+                'bias': strategy['bias'],
+                'direction': strategy['direction'],
+                'signal_strength': float(
+                    strategy['signal_strength'].strip('%')
+                )
+                / 100,
+                'position': strategy['position'],
+                'entry_points': [
+                    {
+                        'price': float(entry['price']),
+                        'type': entry['type'],
+                        'strength': entry['strength'],
+                    }
+                    for entry in strategy['entry_points']
+                ],
+                'stops': [
+                    {
+                        'price': float(stop['price']),
+                        'type': stop['type'],
+                        'risk': stop['risk'],
+                    }
+                    for stop in strategy['stops']
+                ],
+            },
+            'risk_warnings': [
+                f"当前波动率为 {trend_stage['volatility']:.2f}%，"
+                + ('建议降低仓位' if trend_stage['volatility'] > 5 else '波动风险适中'),
+                '大盘走势可能影响个币表现，注意关注大盘动向',
+                '建议严格执行止损策略，控制风险',
+                '不要追高或抄底，耐心等待好的进场点',
+            ],
+        }
 
-            return json_data
+        return json_data
 
-        except Exception as e:
-            return {'error': True, 'message': f'生成JSON数据出错: {str(e)}'}
+        # except Exception as e:
+        #     return {'error': True, 'message': f'生成JSON数据出错: {str(e)}'}
 
 
 def main():
-    try:
-        analyzer = CryptoAnalyzer('BTCUSDT')
-        report = analyzer.generate_json_data()
-        print(report)
-    except Exception as e:
-        print(f'程序运行错误: {str(e)}')
+    # try:
+    analyzer = CryptoAnalyzer('SUIUSDT')
+    report = analyzer.generate_json_data()
+    print(report)
+    # except Exception as e:
+    #     print(f'程序运行错误: {str(e)}')
 
 
 def run(symbol):
