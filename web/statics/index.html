@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Data Analyzer</title>
+    <title>虚拟货币分析系统</title>
     <script src="vue.global.js"></script>
     <link rel="stylesheet" href="index.css">
     <script src="index.full.js"></script>
@@ -176,17 +176,28 @@
             <div class="data-form">
                 <el-form ref="downloadForm" :model="formData" label-position="top">
                     <el-form-item label="交易对">
+                        <div v-if="formData.symbol === 'custom'">
+                            <el-input
+                                v-model="formData.customSymbol"
+                                placeholder="请输入交易对，例如：BTCUSDT"
+                                style="margin-bottom: 10px;"
+                            />
+                        </div>
                         <el-select
                             v-model="formData.symbol"
                             placeholder="请选择交易对"
                             filterable
-                            allow-create
                             :loading="symbolsLoading">
                             <el-option
                                 v-for="symbol in commonSymbols"
                                 :key="symbol"
                                 :label="symbol"
                                 :value="symbol">
+                            </el-option>
+                            <el-option
+                                key="custom"
+                                label="自定义交易对"
+                                value="custom">
                             </el-option>
                         </el-select>
                     </el-form-item>
@@ -344,6 +355,7 @@
             setup() {
                 const formData = reactive({
                     symbol: '',
+                    customSymbol: '',  // 添加自定义交易对输入
                     selectedTimeframes: ['1d_30', '4h_7', '1h_3', '15m_1']
                 });
 
@@ -406,9 +418,25 @@
                     }
                 };
 
+                const getSymbol = () => {
+                    let symbol = formData.symbol;
+                    if (symbol === 'custom') {
+                        symbol = formData.customSymbol;
+                    }
+                    if (!symbol.endsWith('USDT')) {
+                        symbol = `${symbol}USDT`;
+                    }
+                    return symbol.replace('/', '');
+                };
+
                 const handleDownload = async () => {
                     if (!formData.symbol) {
                         ElMessage.warning('请选择交易对');
+                        return;
+                    }
+
+                    if (formData.symbol === 'custom' && !formData.customSymbol) {
+                        ElMessage.warning('请输入自定义交易对');
                         return;
                     }
 
@@ -420,12 +448,7 @@
                     try {
                         downloading.value = true;
 
-                        // 处理交易对格式
-                        let symbolFormatted = formData.symbol;
-                        if (!symbolFormatted.endsWith('USDT')) {
-                            symbolFormatted = `${symbolFormatted}USDT`;
-                        }
-                        symbolFormatted = symbolFormatted.replace('/', ''); // 移除可能存在的斜杠
+                        const symbolFormatted = getSymbol();
 
                         // 创建 FormData 对象
                         const formDataObj = new FormData();
@@ -477,18 +500,24 @@
 
                 const handleAnalysis = async () => {
                     if (!formData.symbol) {
-                        ElMessage.warning('Please select a trading pair');
+                        ElMessage.warning('请选择交易对');
+                        return;
+                    }
+
+                    if (formData.symbol === 'custom' && !formData.customSymbol) {
+                        ElMessage.warning('请输入自定义交易对');
                         return;
                     }
 
                     try {
                         analyzing.value = true;
-                        const response = await axios.get(`/analysis/${formData.symbol}`);
+                        const symbolFormatted = getSymbol();
+                        const response = await axios.get(`/analysis/${symbolFormatted}`);
                         analysisResult.value = response.data;
                         activeTab.value = 'result';
-                        ElMessage.success('Analysis completed');
+                        ElMessage.success('分析完成');
                     } catch (error) {
-                        ElMessage.error('Failed to get analysis');
+                        ElMessage.error('获取分析数据失败');
                         console.error('Error:', error);
                     } finally {
                         analyzing.value = false;
