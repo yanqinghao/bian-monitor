@@ -3,702 +3,533 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Binance Kline Data Downloader</title>
+    <title>Crypto Data Analyzer</title>
+    <script src="vue.global.js"></script>
+    <link rel="stylesheet" href="index.css">
+    <script src="index.full.js"></script>
+    <script src="3.4.5.js"></script>
     <script src="axios.min.js"></script>
+    <script src="index.iife.min.js"></script>
     <style>
+        :root {
+            --el-color-primary: #409eff;
+            --border-color: #dcdfe6;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background-color: #f5f7fa;
+        }
+
+        .app-container {
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
-        h1 {
+
+        .page-header {
             text-align: center;
-        }
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        label {
-            font-weight: bold;
-        }
-        input, select {
-            padding: 5px;
-            font-size: 16px;
-        }
-        button {
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .timeframe-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .timeframe-option {
-            display: flex;
-            align-items: center;
-        }
-        #customSymbolInput {
-            display: none;
-        }
-        .analysis-prompt {
-            margin-top: 30px;
+            margin-bottom: 30px;
             padding: 20px;
-            background: #f8f9fa;
+        }
+
+        .page-title {
+            font-size: 28px;
+            color: var(--el-color-primary);
+            margin: 0;
+        }
+
+        .data-form {
+            background: white;
+            padding: 24px;
             border-radius: 8px;
-            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
         }
 
-        .analysis-prompt h2 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.25rem;
-        }
-
-        .analysis-options {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
-        .analysis-option {
-            background: white;
-            border: 1px solid #cbd5e0;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .analysis-option:hover {
-            background: #edf2f7;
-            border-color: #a0aec0;
-        }
-
-        .analysis-option.active {
-            background: #4299e1;
-            color: white;
-            border-color: #3182ce;
-        }
-
-        .prompt-text {
-            background: white;
-            padding: 15px 20px;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
-            margin-top: 15px;
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-
-        .prompt-text p {
-            margin: 0 0 15px 0;
-        }
-
-        .prompt-text ul {
-            margin: 5px 0 15px 0;
-            padding-left: 20px;
-        }
-
-        .prompt-text li {
-            margin-bottom: 8px;
-        }
-
-        .prompt-text .section {
-            margin-bottom: 20px;
-        }
-
-        .prompt-text .section-title {
-            font-weight: bold;
-            color: #2d3748;
-            margin-bottom: 8px;
-        }
-
-        .disclaimer {
-            font-size: 0.8rem;
-            color: #718096;
-            margin-top: 10px;
-            font-style: italic;
-        }
-        .copy-button {
-            background-color: #4299e1;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 15px;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-
-        .copy-button:hover {
-            background-color: #3182ce;
-        }
-
-        .copy-feedback {
-            display: none;
-            color: #38a169;
-            font-size: 14px;
-            margin-left: 10px;
-        }
-
-        #template-container {
-            display: none;
-        }
-
-        .analysis-result {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-        }
-
-        .analysis-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
-        }
-
-        .analysis-tab {
-            background: white;
-            border: 1px solid #cbd5e0;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .analysis-tab:hover {
-            background: #edf2f7;
-            border-color: #a0aec0;
-        }
-
-        .analysis-tab.active {
-            background: #4299e1;
-            color: white;
-            border-color: #3182ce;
-        }
-
-        .analysis-content {
-            display: none;
-            background: white;
-            padding: 15px 20px;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
-            margin-top: 15px;
-            font-size: 0.95rem;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-
-        .analysis-content.active {
-            display: block;
-        }
-
-        .analysis-header {
+        .timeframes-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .main-content {
+            margin-top: 20px;
             background: white;
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 15px;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .header-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .header-item {
-            display: flex;
-            flex-direction: column;
+            padding: 12px;
+            background: #f5f7fa;
+            border-radius: 4px;
         }
 
         .header-label {
-            font-size: 0.875rem;
-            color: #64748b;
-        }
-
-        .header-value {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-top: 4px;
-        }
-
-        .change-up {
-            color: #10b981;
-        }
-
-        .change-down {
-            color: #ef4444;
-        }
-
-        .analysis-result {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-        }
-
-        /* 分为左右两栏布局 */
-        .analysis-content-wrapper {
-            display: flex;
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        /* 左侧标签页按钮区域 */
-        .analysis-tabs {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            min-width: 150px;
-            padding-right: 20px;
-            border-right: 2px solid #e2e8f0;
-        }
-
-        .analysis-tab {
-            background: #f8f9fa;
-            border: 1px solid #cbd5e0;
-            padding: 12px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: #4a5568;
-            text-align: left;
-            font-weight: 500;
-        }
-
-        .analysis-tab:hover {
-            background: #edf2f7;
-            border-color: #4a5568;
-        }
-
-        .analysis-tab.active {
-            background: #2563eb;
-            color: white;
-            border-color: #1d4ed8;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        /* 右侧内容区域 */
-        .analysis-content-container {
-            flex: 1;
-        }
-
-        .analysis-content {
-            display: none;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            font-size: 0.95rem;
-            line-height: 1.7;
-            white-space: pre-wrap;
-            color: #1f2937;
-        }
-
-        .analysis-content.active {
-            display: block;
-        }
-
-        /* 头部信息样式优化 */
-        .analysis-header {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            margin-bottom: 20px;
-        }
-
-        .header-label {
-            font-size: 0.875rem;
-            color: #64748b;
+            font-size: 12px;
+            color: #909399;
             margin-bottom: 4px;
         }
 
         .header-value {
-            font-size: 1.125rem;
+            font-size: 16px;
             font-weight: 600;
-            color: #1f2937;
+            color: #303133;
         }
 
-        /* 涨跌幅颜色 */
-        .change-up {
-            color: #10b981;
-        }
+        .change-up { color: #67c23a; }
+        .change-down { color: #f56c6c; }
 
-        .change-down {
-            color: #ef4444;
-        }
-
-        /* 标题样式 */
-        .analysis-result h2 {
-            color: #1f2937;
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        /* 免责声明样式 */
-        .analysis-result .disclaimer {
+        .disclaimer {
             margin-top: 20px;
-            padding-top: 15px;
-            border-top: 1px solid #e2e8f0;
+            padding: 12px;
+            background: #fdf6ec;
+            border-radius: 4px;
+            color: #e6a23c;
+            font-size: 12px;
         }
 
-        /* 添加主容器样式 */
-        .analysis-container {
-            display: flex;
-            gap: 20px;
-            margin-top: 30px;
+        .analysis-section {
+            margin: 16px 0;
         }
 
-        /* 调整左右两个模块的宽度 */
-        .analysis-prompt, 
-        .analysis-result {
-            flex: 1;
-            margin-top: 0 !important; /* 覆盖原来的边距 */
-            max-height: 800px; /* 设置最大高度 */
-            overflow-y: auto; /* 内容超出时显示滚动条 */
+        .analysis-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #303133;
         }
 
-        /* 调整最大宽度 */
-        body {
-            max-width: 1200px !important; /* 覆盖原来的600px限制 */
+        .analysis-content {
+            background: #fafafa;
+            padding: 16px;
+            border-radius: 4px;
         }
 
-        /* 为滚动条添加样式 */
-        .analysis-prompt::-webkit-scrollbar,
-        .analysis-result::-webkit-scrollbar {
-            width: 6px;
+        .template-content {
+            white-space: pre-wrap;
+            background: #fafafa;
+            padding: 16px;
+            border-radius: 4px;
+            font-family: monospace;
         }
 
-        .analysis-prompt::-webkit-scrollbar-track,
-        .analysis-result::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 3px;
+        .mt-4 {
+            margin-top: 1rem;
         }
 
-        .analysis-prompt::-webkit-scrollbar-thumb,
-        .analysis-result::-webkit-scrollbar-thumb {
-            background: #cbd5e0;
-            border-radius: 3px;
+        .mb-2 {
+            margin-bottom: 0.5rem;
         }
 
-        .analysis-prompt::-webkit-scrollbar-thumb:hover,
-        .analysis-result::-webkit-scrollbar-thumb:hover {
-            background: #a0aec0;
+        .font-bold {
+            font-weight: bold;
         }
 
-        /* 确保内容区域的宽度合适 */
-        .analysis-content-wrapper {
-            min-width: 0; /* 防止flex子项溢出 */
+        .analysis-content h4 {
+            color: #409eff;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.5rem;
         }
 
-        /* 适当减小字体大小以适应新布局 */
-        .prompt-text, .analysis-content {
-            font-size: 0.9rem;
+        .analysis-content > div {
+            padding: 0.5rem 0;
+        }
+
+        .analysis-content ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+        }
+
+        .analysis-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        [v-cloak] {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Binance Kline Data Downloader</h1>
-    <form id="downloadForm">
-        <label for="symbol">Trading Pair:</label>
-        <select id="symbol" name="symbol" required>
-            <option value="">Select a trading pair</option>
-            <option value="custom">Custom</option>
-        </select>
-        <input type="text" id="customSymbolInput" name="customSymbol" placeholder="Enter custom trading pair">
+    <div id="app" v-cloak>
+        <div class="app-container">
+            <header class="page-header">
+                <h1 class="page-title">加密货币数据分析工具</h1>
+            </header>
 
-        <label>Timeframes:</label>
-        <div class="timeframe-options">
-            <div class="timeframe-option">
-                <input type="checkbox" id="3d_1200" name="timeframes" value="3d_1200" >
-                <label for="3d_1200">3 day interval for 1200 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="1d_365" name="timeframes" value="1d_365" >
-                <label for="3d_1200">1 day interval for 365 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="1d_180" name="timeframes" value="1d_180" >
-                <label for="3d_1200">1 day interval for 180 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="1d_90" name="timeframes" value="1d_90" >
-                <label for="1d_365">1 day interval for 90 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="1d_30" name="timeframes" value="1d_30" checked>
-                <label for="1d_365">1 day interval for 30 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="4h_7" name="timeframes" value="4h_7" checked>
-                <label for="4h_7">4 hour interval for 7 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="1h_3" name="timeframes" value="1h_3" checked>
-                <label for="1h_3">1 hour interval for 3 days</label>
-            </div>
-            <div class="timeframe-option">
-                <input type="checkbox" id="15m_1" name="timeframes" value="15m_1" checked>
-                <label for="15m_1">15 minute interval for 1 day</label>
-            </div>
-        </div>
+            <div class="data-form">
+                <el-form ref="downloadForm" :model="formData" label-position="top">
+                    <el-form-item label="交易对">
+                        <el-select
+                            v-model="formData.symbol"
+                            placeholder="请选择交易对"
+                            filterable
+                            allow-create
+                            :loading="symbolsLoading">
+                            <el-option
+                                v-for="symbol in commonSymbols"
+                                :key="symbol"
+                                :label="symbol"
+                                :value="symbol">
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
 
-        <button type="submit">Download Data</button>
-    </form>
+                    <el-form-item label="时间周期">
+                        <div class="timeframes-container">
+                            <el-checkbox
+                                v-for="timeframe in timeframes"
+                                :key="timeframe.value"
+                                v-model="formData.selectedTimeframes"
+                                :label="timeframe.value">
+                                {{ timeframe.label }}
+                            </el-checkbox>
+                        </div>
+                    </el-form-item>
 
-    <div class="analysis-container">
-        <div class="analysis-prompt">
-            <h2>技术分析请求</h2>
-            <button class="copy-button" onclick="copyTemplate()">复制分析模板</button>
-            <span class="copy-feedback" id="copyFeedback">已复制!</span>
-            <!-- <div class="analysis-options">
-                <div class="analysis-option active">综合分析</div>
-                <div class="analysis-option">趋势分析</div>
-                <div class="analysis-option">支阻位分析</div>
-                <div class="analysis-option">交易策略</div>
-            </div> -->
-    
-            <div id="template-container">尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：
-    
-                整体趋势研判
-                • 中长期走势研判（趋势/震荡）
-                • 主要趋势阶段位置
-                • 近期趋势延续可能性
-    
-                技术指标分析
-                • MACD指标：多空动能、背离信号
-                • KDJ指标：超买超卖、金叉死叉
-                • MA均线：多空排列、交叉信号
-                • 成交量：量价关系、资金趋势
-    
-                重要价位分析
-                • 当前关键支撑位
-                • 主要阻力位置
-                • 突破确认条件
-    
-                操作建议
-                • 最佳介入价位区间
-                • 最佳止盈止损价位（风控）
-                • 目标获利位置
-                • 仓位管理策略
-                • 现货与合约挂单、下单建议</div>
-    
-            <div class="prompt-text">
-                <p>尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：</p>
-    
-                <div class="section">
-                    <div class="section-title">整体趋势研判</div>
-                    • 中长期走势研判（趋势/震荡）<br>
-                    • 主要趋势阶段位置<br>
-                    • 近期趋势延续可能性
-                </div>
-    
-                <div class="section">
-                    <div class="section-title">技术指标分析</div>
-                    • MACD指标：多空动能、背离信号<br>
-                    • KDJ指标：超买超卖、金叉死叉<br>
-                    • MA均线：多空排列、交叉信号<br>
-                    • 成交量：量价关系、资金趋势
-                </div>
-    
-                <div class="section">
-                    <div class="section-title">重要价位分析</div>
-                    • 当前关键支撑位<br>
-                    • 主要阻力位置<br>
-                    • 突破确认条件
-                </div>
-    
-                <div class="section">
-                    <div class="section-title">操作建议</div>
-                    • 最佳介入价位区间<br>
-                    • 最佳止盈止损价位（风控）<br>
-                    • 目标获利位置<br>
-                    • 仓位管理策略<br>
-                    • 现货与合约挂单、下单建议
-                </div>
+                    <el-form-item>
+                        <div class="button-group">
+                            <el-button
+                                type="primary"
+                                @click="handleDownload"
+                                :loading="downloading">
+                                下载数据
+                            </el-button>
+                            <el-button
+                                type="success"
+                                @click="handleAnalysis"
+                                :loading="analyzing">
+                                分析数据
+                            </el-button>
+                        </div>
+                    </el-form-item>
+                </el-form>
             </div>
-    
-            <div class="disclaimer">
-                免责声明：以上分析仅供参考，不构成投资建议。加密货币市场风险较大，请谨慎决策。
-            </div>
-        </div>
-    
-        <div class="analysis-result" style="display: none;">
-            <h2>技术分析结果</h2>
-            <div class="analysis-content-wrapper">
-                <div class="analysis-tabs">
-                    <button class="analysis-tab active" data-tab="trend">
-                        趋势分析
-                    </button>
-                    <button class="analysis-tab" data-tab="levels">
-                        价位分析
-                    </button>
-                    <button class="analysis-tab" data-tab="strategy">
-                        交易策略
-                    </button>
-                    <button class="analysis-tab" data-tab="risks">
-                        风险提示
-                    </button>
-                </div>
-                <div class="analysis-content-container">
-                    <div class="analysis-content active" id="trend-content"></div>
-                    <div class="analysis-content" id="levels-content"></div>
-                    <div class="analysis-content" id="strategy-content"></div>
-                    <div class="analysis-content" id="risks-content"></div>
-                </div>
-            </div>
-            <div class="disclaimer">
-                注意：以上分析仅供参考，不构成投资建议，请根据自身情况作出判断
+
+            <div class="main-content">
+                <el-tabs v-model="activeTab">
+                    <el-tab-pane label="分析模板" name="template">
+                        <div class="template-content">
+{{ analysisTemplate }}
+                        </div>
+                        <el-button
+                            class="mt-4"
+                            type="primary"
+                            plain
+                            @click="copyTemplate"
+                            :loading="copying">
+                            复制模板
+                        </el-button>
+                    </el-tab-pane>
+
+                    <el-tab-pane label="分析结果" name="result">
+                        <template v-if="analysisResult">
+                            <div class="header-info">
+                                <div class="header-item">
+                                    <div class="header-label">交易对</div>
+                                    <div class="header-value">{{ analysisResult.basic_info.symbol }}</div>
+                                </div>
+                                <div class="header-item">
+                                    <div class="header-label">当前价格</div>
+                                    <div class="header-value">{{ analysisResult.basic_info.current_price }}</div>
+                                </div>
+                                <div class="header-item">
+                                    <div class="header-label">24小时涨跌幅</div>
+                                    <div class="header-value" :class="analysisResult.basic_info.change_24h >= 0 ? 'change-up' : 'change-down'">
+                                        {{ analysisResult.basic_info.change_24h.toFixed(2) }}%
+                                    </div>
+                                </div>
+                                <div class="header-item">
+                                    <div class="header-label">更新时间</div>
+                                    <div class="header-value">{{ analysisResult.basic_info.report_time }}</div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-section">
+                                <div class="analysis-title">趋势分析</div>
+                                <div class="analysis-content">
+                                    <p><strong>当前阶段:</strong> {{ analysisResult.trend_analysis.current_stage.stage }}</p>
+                                    <p><strong>描述:</strong> {{ analysisResult.trend_analysis.current_stage.description }}</p>
+                                    <p><strong>成交量趋势:</strong> {{ analysisResult.trend_analysis.current_stage.volume_trend }}</p>
+                                    <p><strong>动能:</strong> {{ analysisResult.trend_analysis.current_stage.momentum.toFixed(2) }}</p>
+                                    <p><strong>波动率:</strong> {{ analysisResult.trend_analysis.current_stage.volatility.toFixed(2) }}</p>
+
+                                    <div v-for="(analysis, timeframe) in analysisResult.trend_analysis.timeframe_analysis" :key="timeframe" class="mt-4">
+                                        <h4 class="font-bold mb-2">{{ analysis.period }}分析</h4>
+                                        <p><strong>MA趋势:</strong> {{ analysis.ma_trend.pattern }} ({{ analysis.ma_trend.strength }}, {{ analysis.ma_trend.bias }})</p>
+                                        <p><strong>MACD:</strong>
+                                            趋势:{{ analysis.macd.trend }},
+                                            交叉:{{ analysis.macd.cross }},
+                                            柱值:{{ analysis.macd.histogram.toFixed(2) }}
+                                        </p>
+                                        <p><strong>KDJ:</strong>
+                                            K:{{ analysis.kdj.k.toFixed(2) }},
+                                            D:{{ analysis.kdj.d.toFixed(2) }},
+                                            J:{{ analysis.kdj.j.toFixed(2) }},
+                                            状态:{{ analysis.kdj.status }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-section">
+                                <div class="analysis-title">重要价位分析</div>
+                                <div class="analysis-content">
+                                    <p><strong>阻力位:</strong> {{ analysisResult.key_levels.resistances.join(', ') }}</p>
+                                    <p><strong>支撑位:</strong> {{ analysisResult.key_levels.supports.join(', ') }}</p>
+                                </div>
+                            </div>
+
+                            <div class="analysis-section">
+                                <div class="analysis-title">交易策略</div>
+                                <div class="analysis-content">
+                                    <p><strong>偏向:</strong> {{ analysisResult.trading_strategy.bias }}</p>
+                                    <p><strong>方向:</strong> {{ analysisResult.trading_strategy.direction }}</p>
+                                    <p><strong>信号强度:</strong> {{ (analysisResult.trading_strategy.signal_strength * 100).toFixed(2) }}%</p>
+                                    <p><strong>建议仓位:</strong> 最大 {{ analysisResult.trading_strategy.position.max }}%, 每次 {{ analysisResult.trading_strategy.position.step }}%</p>
+
+                                    <div class="mt-4">
+                                        <h4 class="font-bold mb-2">建议入场点位</h4>
+                                        <div v-for="(point, index) in analysisResult.trading_strategy.entry_points" :key="index">
+                                            <p>价格: {{ point.price }} - {{ point.type }} ({{ point.strength }})</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <h4 class="font-bold mb-2">止损设置</h4>
+                                        <div v-for="(stop, index) in analysisResult.trading_strategy.stops" :key="index">
+                                            <p>{{ stop.type }}: {{ stop.price }} (风险: {{ stop.risk }})</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-section">
+                                <div class="analysis-title">风险提示</div>
+                                <div class="analysis-content">
+                                    <ul>
+                                        <li v-for="warning in analysisResult.risk_warnings">{{ warning }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </template>
+                        <el-empty v-else description="暂无分析数据" />
+                    </el-tab-pane>
+                </el-tabs>
             </div>
         </div>
     </div>
 
-    
-
-    <script src="script.js"></script>
     <script>
-        function copyTemplate() {
-            // 获取模板文本
-            const templateText = document.getElementById('template-container').innerText;
+        const { createApp, ref, reactive } = Vue;
+        const { ElMessage } = ElementPlus;
 
-            // 创建临时文本区域
-            const textarea = document.createElement('textarea');
-            textarea.value = templateText;
-            document.body.appendChild(textarea);
-
-            // 选择并复制文本
-            textarea.select();
-            document.execCommand('copy');
-
-            // 移除临时文本区域
-            document.body.removeChild(textarea);
-
-            // 显示反馈信息
-            const feedback = document.getElementById('copyFeedback');
-            feedback.style.display = 'inline';
-
-            // 2秒后隐藏反馈信息
-            setTimeout(() => {
-                feedback.style.display = 'none';
-            }, 2000);
-        }
-
-
-        async function getAnalysis(symbol) {
-            try {
-                const response = await fetch(`/analysis/${symbol}`);
-                if (!response.ok) throw new Error('Analysis request failed');
-                const text = await response.text();
-                
-                // 解析文本并显示
-                displayAnalysis(text);
-                
-                // 显示分析结果区域
-                document.querySelector('.analysis-result').style.display = 'block';
-            } catch (error) {
-                console.error('Error fetching analysis:', error);
-            }
-        }
-
-        function displayAnalysis(text) {
-            // 先清除旧的header和内容
-            const result = document.querySelector('.analysis-result');
-            const oldHeader = result.querySelector('.analysis-header');
-            if (oldHeader) {
-                oldHeader.remove();
-            }
-
-            // 解析基本信息
-            const headerMatch = text.match(/# (.*?) 技术分析报告\s+\*\*报告时间\*\*: (.*?)\s+\*\*当前价格\*\*: (.*?)\s+\*\*24h涨跌幅\*\*: (.*?)%/s);
-            if (headerMatch) {
-                const [_, symbol, time, price, change] = headerMatch;
-                const headerHTML = `
-                    <div class="analysis-header">
-                        <div class="header-item">
-                            <span class="header-label">交易对</span>
-                            <span class="header-value">${symbol}</span>
-                        </div>
-                        <div class="header-item">
-                            <span class="header-label">当前价格</span>
-                            <span class="header-value">${price}</span>
-                        </div>
-                        <div class="header-item">
-                            <span class="header-label">24h涨跌幅</span>
-                            <span class="header-value ${parseFloat(change) >= 0 ? 'change-up' : 'change-down'}">${change}%</span>
-                        </div>
-                        <div class="header-item">
-                            <span class="header-label">更新时间</span>
-                            <span class="header-value">${time}</span>
-                        </div>
-                    </div>
-                `;
-                // 将新header插入到第一个子元素之前
-                const firstChild = result.firstChild;
-                result.insertBefore(document.createRange().createContextualFragment(headerHTML), firstChild);
-            }
-
-            // 清空并更新各标签页内容
-            const sections = {
-                trend: text.match(/## 一、趋势分析([\s\S]*?)(?=## 二、关键价位分析)/)?.[1] || '',
-                levels: text.match(/## 二、关键价位分析([\s\S]*?)(?=## 三、交易策略建议)/)?.[1] || '',
-                strategy: text.match(/## 三、交易策略建议([\s\S]*?)(?=## 四、风险提示)/)?.[1] || '',
-                risks: text.match(/## 四、风险提示([\s\S]*?)(?=注意：)/)?.[1] || ''
-            };
-
-            // 更新各标签页内容
-            for (const [id, content] of Object.entries(sections)) {
-                const element = document.getElementById(`${id}-content`);
-                if (element) {
-                    element.textContent = content.trim();
-                }
-            }
-        }
-
-        // 添加标签页切换功能
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabs = document.querySelectorAll('.analysis-tab');
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    // 移除所有活动状态
-                    tabs.forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.analysis-content').forEach(c => c.classList.remove('active'));
-                    
-                    // 添加新的活动状态
-                    tab.classList.add('active');
-                    const tabId = tab.dataset.tab;
-                    document.getElementById(`${tabId}-content`).classList.add('active');
+        const app = createApp({
+            setup() {
+                const formData = reactive({
+                    symbol: '',
+                    selectedTimeframes: ['1d_30', '4h_7', '1h_3', '15m_1']
                 });
-            });
 
-            // 修改现有的表单提交事件
-            const form = document.getElementById('downloadForm');
-            form.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const symbol = document.getElementById('symbol').value;
-                // 在下载数据后获取分析
-                if (symbol !== 'custom') {
-                    await getAnalysis(symbol);
-                } else {
-                    const customSymbol = document.getElementById('customSymbolInput').value;
-                    await getAnalysis(customSymbol);
-                }
-            });
+                const commonSymbols = ref([]);
+                const symbolsLoading = ref(false);
+                const downloading = ref(false);
+                const analyzing = ref(false);
+                const copying = ref(false);
+                const activeTab = ref('template');
+                const analysisResult = ref(null);
+
+                const timeframes = [
+                    { value: '3d_1200', label: '3天/1200天' },
+                    { value: '1d_365', label: '1天/365天' },
+                    { value: '1d_180', label: '1天/180天' },
+                    { value: '1d_90', label: '1天/90天' },
+                    { value: '1d_30', label: '1天/30天' },
+                    { value: '4h_7', label: '4小时/7天' },
+                    { value: '1h_3', label: '1小时/3天' },
+                    { value: '15m_1', label: '15分钟/1天' }
+                ];
+
+                const analysisTemplate = `尊敬的分析师，请基于当前市场数据，为该交易对提供专业的技术分析报告，包含以下要点：
+
+1. 整体趋势研判
+• 中长期走势研判（趋势/震荡）
+• 主要趋势阶段位置
+• 近期趋势延续可能性
+
+2. 技术指标分析
+• MACD指标：多空动能、背离信号
+• KDJ指标：超买超卖、金叉死叉
+• MA均线：多空排列、交叉信号
+• 成交量：量价关系、资金趋势
+
+3. 重要价位分析
+• 当前关键支撑位
+• 主要阻力位置
+• 突破确认条件
+
+4. 操作建议
+• 最佳介入价位区间
+• 最佳止盈止损价位（风控）
+• 目标获利位置
+• 仓位管理策略
+• 现货与合约挂单、下单建议
+
+注意：以上分析仅供参考，不构成投资建议。加密货币市场风险较大，请谨慎决策。`;
+
+                const loadCommonSymbols = async () => {
+                    try {
+                        symbolsLoading.value = true;
+                        const response = await axios.get('/common_symbols');
+                        commonSymbols.value = response.data;
+                    } catch (error) {
+                        ElMessage.error('Failed to load trading pairs');
+                        console.error('Error:', error);
+                    } finally {
+                        symbolsLoading.value = false;
+                    }
+                };
+
+                const handleDownload = async () => {
+                    if (!formData.symbol) {
+                        ElMessage.warning('Please select a trading pair');
+                        return;
+                    }
+
+                    if (formData.selectedTimeframes.length === 0) {
+                        ElMessage.warning('Please select at least one timeframe');
+                        return;
+                    }
+
+                    try {
+                        downloading.value = true;
+
+                        const validateResponse = await axios.post('/validate_symbol', {
+                            symbol: formData.symbol
+                        });
+
+                        if (!validateResponse.data.valid) {
+                            ElMessage.error('Invalid trading pair');
+                            return;
+                        }
+
+                        const response = await axios.post('/download', {
+                            symbol: formData.symbol,
+                            timeframes: formData.selectedTimeframes
+                        }, { responseType: 'blob' });
+
+                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', response.headers['content-disposition'].split('filename=')[1]);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+
+                        ElMessage.success('Data downloaded successfully');
+                    } catch (error) {
+                        ElMessage.error('Failed to download data');
+                        console.error('Error:', error);
+                    } finally {
+                        downloading.value = false;
+                    }
+                };
+
+                const handleAnalysis = async () => {
+                    if (!formData.symbol) {
+                        ElMessage.warning('Please select a trading pair');
+                        return;
+                    }
+
+                    try {
+                        analyzing.value = true;
+                        const response = await axios.get(`/analysis/${formData.symbol}`);
+                        analysisResult.value = response.data;
+                        activeTab.value = 'result';
+                        ElMessage.success('Analysis completed');
+                    } catch (error) {
+                        ElMessage.error('Failed to get analysis');
+                        console.error('Error:', error);
+                    } finally {
+                        analyzing.value = false;
+                    }
+                };
+
+                const copyTemplate = async () => {
+                    try {
+                        copying.value = true;
+                        const textArea = document.createElement('textarea');
+                        textArea.style.position = 'fixed';
+                        textArea.style.top = '0';
+                        textArea.style.left = '0';
+                        textArea.style.width = '2em';
+                        textArea.style.height = '2em';
+                        textArea.style.padding = '0';
+                        textArea.style.border = 'none';
+                        textArea.style.outline = 'none';
+                        textArea.style.boxShadow = 'none';
+                        textArea.style.background = 'transparent';
+                        textArea.value = analysisTemplate;
+
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+
+                        try {
+                            document.execCommand('copy');
+                            ElMessage.success('模板已复制到剪贴板');
+                        } catch (err) {
+                            ElMessage.error('复制失败，请手动复制');
+                        }
+
+                        document.body.removeChild(textArea);
+                    } catch (error) {
+                        console.error('复制错误:', error);
+                        ElMessage.error('复制模板失败');
+                    } finally {
+                        copying.value = false;
+                    }
+                };
+
+                // 组件挂载时加载交易对列表
+                loadCommonSymbols();
+
+                return {
+                    formData,
+                    commonSymbols,
+                    symbolsLoading,
+                    downloading,
+                    analyzing,
+                    copying,
+                    activeTab,
+                    analysisResult,
+                    timeframes,
+                    analysisTemplate,
+                    handleDownload,
+                    handleAnalysis,
+                    copyTemplate
+                };
+            }
         });
+
+        app.use(ElementPlus);
+        app.mount('#app');
     </script>
 </body>
 </html>
