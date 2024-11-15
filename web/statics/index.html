@@ -408,44 +408,68 @@
 
                 const handleDownload = async () => {
                     if (!formData.symbol) {
-                        ElMessage.warning('Please select a trading pair');
+                        ElMessage.warning('请选择交易对');
                         return;
                     }
 
                     if (formData.selectedTimeframes.length === 0) {
-                        ElMessage.warning('Please select at least one timeframe');
+                        ElMessage.warning('请选择至少一个时间周期');
                         return;
                     }
 
                     try {
                         downloading.value = true;
 
-                        const validateResponse = await axios.post('/validate_symbol', {
-                            symbol: formData.symbol
+                        // 处理交易对格式
+                        let symbolFormatted = formData.symbol;
+                        if (!symbolFormatted.endsWith('USDT')) {
+                            symbolFormatted = `${symbolFormatted}USDT`;
+                        }
+                        symbolFormatted = symbolFormatted.replace('/', ''); // 移除可能存在的斜杠
+
+                        // 创建 FormData 对象
+                        const formDataObj = new FormData();
+                        formDataObj.append('symbol', symbolFormatted);
+                        formData.selectedTimeframes.forEach(timeframe => {
+                            formDataObj.append('timeframes', timeframe);
                         });
 
+                        // 验证交易对
+                        const validateFormData = new FormData();
+                        validateFormData.append('symbol', symbolFormatted);
+                        const validateResponse = await axios.post('/validate_symbol', validateFormData);
                         if (!validateResponse.data.valid) {
-                            ElMessage.error('Invalid trading pair');
+                            ElMessage.error('无效的交易对');
                             return;
                         }
 
-                        const response = await axios.post('/download', {
-                            symbol: formData.symbol,
-                            timeframes: formData.selectedTimeframes
-                        }, { responseType: 'blob' });
+                        // 下载数据
+                        const response = await axios.post('/download', formDataObj, {
+                            responseType: 'blob'
+                        });
 
-                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                        // 创建下载链接
+                        const blob = new Blob([response.data], { type: 'application/zip' });
+                        const url = window.URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.href = url;
-                        link.setAttribute('download', response.headers['content-disposition'].split('filename=')[1]);
+
+                        // 设置文件名
+                        const filename = response.headers['content-disposition']
+                            ? response.headers['content-disposition'].split('filename=')[1]
+                            : `${symbolFormatted}_data.zip`;
+                        link.setAttribute('download', filename);
+
+                        // 触发下载
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
 
-                        ElMessage.success('Data downloaded successfully');
+                        ElMessage.success('数据下载成功');
                     } catch (error) {
-                        ElMessage.error('Failed to download data');
-                        console.error('Error:', error);
+                        console.error('下载错误:', error);
+                        ElMessage.error('数据下载失败: ' + (error.response?.data || error.message));
                     } finally {
                         downloading.value = false;
                     }
