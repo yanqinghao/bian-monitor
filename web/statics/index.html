@@ -691,7 +691,12 @@
                 e.preventDefault();
                 const symbol = document.getElementById('symbol').value;
                 // 在下载数据后获取分析
-                await getAnalysis(symbol);
+                if (symbol !== 'custom') {
+                    await getAnalysis(symbol);
+                } else {
+                    const customSymbol = document.getElementById('customSymbolInput').value;
+                    await getAnalysis(customSymbol);
+                }
             });
         });
     </script>
