@@ -8,7 +8,11 @@ WORKDIR /app
 COPY . /app
 
 # 安装项目依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN tar -xzf ta-lib-0.4.0-src.tar.gz && \
+    cd ta-lib/ && \
+    ./configure --prefix=/usr && \
+    make && make install && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 让端口 8000 可供此容器外的环境使用
 EXPOSE 8000

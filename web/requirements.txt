@@ -3,3 +3,5 @@ requests
 gunicorn
 pandas
 scipy
+TA-Lib
+websocket-client
