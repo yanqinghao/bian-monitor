@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import tempfile
 import zipfile
 import io
-from auto_analysis import run as run_analysis
+from analysis.crypto_analyzer import CryptoAnalyzer
 
 app = Flask(__name__, static_folder='statics', static_url_path='')
 
@@ -102,13 +102,17 @@ def index():
 
 @app.route('/analysis/<symbol>', methods=['GET'])
 def analysis(symbol: str):
-    symbol = symbol.upper()
-    analysis_result = run_analysis(symbol)
-    return Response(
-        json.dumps(analysis_result, ensure_ascii=False),
-        mimetype='application/json',
-        content_type='application/json; charset=utf-8',
-    )
+    try:
+        symbol = symbol.upper()
+        analyzer = CryptoAnalyzer(symbol)
+        result = analyzer.analyze()
+        return Response(
+            json.dumps(result, ensure_ascii=False),
+            mimetype='application/json',
+            content_type='application/json; charset=utf-8',
+        )
+    except Exception as e:
+        return str(e), 400
 
 
 @app.route('/download', methods=['POST'])

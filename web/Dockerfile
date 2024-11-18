@@ -7,12 +7,23 @@ WORKDIR /app
 # 将当前目录内容复制到容器的 /app 中
 COPY . /app
 
-# 安装项目依赖
+# 安装编译工具和依赖
+RUN apt-get update && \
+    apt-get install -y build-essential wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 安装 TA-Lib
 RUN tar -xzf ta-lib-0.4.0-src.tar.gz && \
     cd ta-lib/ && \
     ./configure --prefix=/usr && \
-    make && make install && \
-    pip install --no-cache-dir -r requirements.txt
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf ta-lib-0.4.0-src.tar.gz ta-lib/
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 让端口 8000 可供此容器外的环境使用
 EXPOSE 8000
