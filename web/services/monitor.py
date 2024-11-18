@@ -10,6 +10,7 @@ import queue
 from datetime import datetime
 from typing import Dict, List
 from collections import deque
+from services.scan import MarketScanner
 
 
 class MarketMonitor:
@@ -42,6 +43,53 @@ class MarketMonitor:
 
         # 添加锁
         self.data_lock = threading.Lock()
+        # 添加scanner
+        self.scanner = MarketScanner()
+
+    def update_monitoring_list(self):
+        """更新监控列表"""
+        try:
+            print('正在更新监控列表...')
+            top_symbols = self.scanner.get_top_symbols(top_n=10)
+
+            # 合并所有列表并去重
+            all_symbols = set()
+            for category in ['volume', 'gainers', 'losers']:
+                if category in top_symbols:
+                    all_symbols.update(top_symbols[category])
+
+            # 转换为小写并更新
+            new_symbols = [s.lower() for s in all_symbols]
+
+            # 打印监控列表变化
+            added = set(new_symbols) - set(self.symbols)
+            removed = set(self.symbols) - set(new_symbols)
+
+            if added:
+                print(f"新增监控: {', '.join(added)}")
+            if removed:
+                print(f"移除监控: {', '.join(removed)}")
+
+            # 更新监控列表
+            self.symbols = new_symbols
+
+            # 更新数据结构
+            with self.data_lock:
+                # 添加新的缓冲区
+                for symbol in added:
+                    self.kline_buffers[symbol] = deque(maxlen=100)
+                    self.volume_buffers[symbol] = deque(maxlen=20)
+
+                # 移除旧的缓冲区
+                for symbol in removed:
+                    self.kline_buffers.pop(symbol, None)
+                    self.volume_buffers.pop(symbol, None)
+                    self.key_levels.pop(symbol, None)
+                    self.latest_data.pop(symbol, None)
+                    self.last_alert_time.pop(symbol, None)
+
+        except Exception as e:
+            print(f'更新监控列表失败: {e}')
 
     def _initialize_data(self):
         """初始化数据"""
