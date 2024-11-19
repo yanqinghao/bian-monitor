@@ -553,7 +553,7 @@ class MarketMonitor:
                 if batch_signals and self.telegram:
                     self.telegram.send_batch_signals(batch_signals)
                     
-                time.sleep(10)
+                time.sleep(300)
 
             except Exception as e:
                 print(f'分析过程出错: {e}')
