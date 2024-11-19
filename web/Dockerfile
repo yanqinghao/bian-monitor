@@ -23,7 +23,7 @@ RUN tar -xzf ta-lib-0.4.0-src.tar.gz && \
     rm -rf ta-lib-0.4.0-src.tar.gz ta-lib/
 
 # 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # 让端口 8000 可供此容器外的环境使用
 EXPOSE 8000
