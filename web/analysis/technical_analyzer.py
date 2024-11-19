@@ -1,447 +1,363 @@
 from typing import Dict, List
-import numpy as np
+import pandas as pd
 import talib
-from scipy.signal import find_peaks
+from analysis.indicators import TechnicalIndicators
+from analysis.levels_finder import LevelsFinder
 
 
 class TechnicalAnalyzer:
     def __init__(self):
-        # 设置各项指标的参数
-        self.rsi_period = 14
-        self.macd_fast = 12
-        self.macd_slow = 26
-        self.macd_signal = 9
-        self.bb_period = 20
-        self.bb_std = 2
-        self.volume_ma_period = 20
-        self.price_ma_periods = [5, 10, 20, 50]
+        # Initialize TechnicalIndicators instance
+        self.indicator_calculator = TechnicalIndicators()
+        self.levels_finder = LevelsFinder()
 
     def calculate_indicators(self, kline_data: List[Dict]) -> Dict:
-        """计算各项技术指标"""
+        """优化指标计算，增加更多时间周期"""
+        df = pd.DataFrame(kline_data)
+        df.columns = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume']
+
+        # 基础指标计算
+        indicators = self.indicator_calculator.calculate_indicators(df)
+        volatility = self.indicator_calculator.calculate_volatility_metrics(df)
+
+        # 格式化结果并添加更多指标
+        formatted_indicators = {
+            'current_price': df['Close'].iloc[-1],
+            'rsi': indicators['rsi'].iloc[-1]
+            if len(indicators['rsi']) > 0
+            else None,
+            'macd': {
+                'macd': indicators['macd']['macd'].iloc[-1],
+                'signal': indicators['macd']['signal'].iloc[-1],
+                'hist': indicators['macd']['hist'].iloc[-1],
+            },
+            'kdj': {
+                'k': indicators['kdj']['k'].iloc[-1],
+                'd': indicators['kdj']['d'].iloc[-1],
+                'j': indicators['kdj']['j'].iloc[-1],
+            },
+            'ma': {
+                period: values.iloc[-1]
+                for period, values in indicators['ma'].items()
+            },
+            'volatility': {
+                'atr_percent': volatility['atr_percent'].iloc[-1],
+                'returns_vol': volatility['returns_volatility'],
+                'keltner': self._calculate_keltner_channels(df),
+                'price_volatility': self._calculate_price_volatility(df),
+            },
+            'trend': self._analyze_trend(df),
+        }
+
+        return formatted_indicators
+
+    def _calculate_price_volatility(self, df: pd.DataFrame) -> Dict:
+        """计算价格波动特征"""
         try:
-            # 转换数据为numpy数组
-            close_prices = np.array([k['close'] for k in kline_data])
-            high_prices = np.array([k['high'] for k in kline_data])
-            low_prices = np.array([k['low'] for k in kline_data])
-            volumes = np.array([k['volume'] for k in kline_data])
+            returns = df['Close'].pct_change()
+            high_low_ratio = df['High'] / df['Low']
 
-            indicators = {
-                'current_price': close_prices[-1]
-                if len(close_prices) > 0
-                else None
+            return {
+                'returns_std': returns.std(),
+                'high_low_ratio': high_low_ratio.mean(),
+                'price_range': (df['High'].max() - df['Low'].min())
+                / df['Close'].mean(),
             }
-
-            # 计算RSI
-            if len(close_prices) > self.rsi_period:
-                indicators['rsi'] = talib.RSI(
-                    close_prices, timeperiod=self.rsi_period
-                )[-1]
-
-            # 计算MACD
-            if len(close_prices) > self.macd_slow:
-                macd, signal, hist = talib.MACD(
-                    close_prices,
-                    fastperiod=self.macd_fast,
-                    slowperiod=self.macd_slow,
-                    signalperiod=self.macd_signal,
-                )
-                indicators['macd'] = {
-                    'macd': macd[-1],
-                    'signal': signal[-1],
-                    'hist': hist[-1],
-                }
-
-            # 计算布林带
-            if len(close_prices) > self.bb_period:
-                upper, middle, lower = talib.BBANDS(
-                    close_prices,
-                    timeperiod=self.bb_period,
-                    nbdevup=self.bb_std,
-                    nbdevdn=self.bb_std,
-                )
-                indicators['bollinger'] = {
-                    'upper': upper[-1],
-                    'middle': middle[-1],
-                    'lower': lower[-1],
-                }
-
-            # 计算多周期均线
-            indicators['ma'] = {}
-            for period in self.price_ma_periods:
-                if len(close_prices) > period:
-                    indicators['ma'][period] = talib.SMA(
-                        close_prices, timeperiod=period
-                    )[-1]
-
-            # 计算KDJ
-            if len(close_prices) > 9:
-                k, d = talib.STOCH(
-                    high_prices,
-                    low_prices,
-                    close_prices,
-                    fastk_period=9,
-                    slowk_period=3,
-                    slowk_matype=0,
-                    slowd_period=3,
-                    slowd_matype=0,
-                )
-                indicators['kdj'] = {
-                    'k': k[-1],
-                    'd': d[-1],
-                    'j': 3 * k[-1] - 2 * d[-1],
-                }
-
-            # 计算成交量变化
-            if len(volumes) > self.volume_ma_period:
-                volume_ma = talib.SMA(
-                    volumes, timeperiod=self.volume_ma_period
-                )[-1]
-                indicators['volume'] = {
-                    'current': volumes[-1],
-                    'ma': volume_ma,
-                    'ratio': volumes[-1] / volume_ma if volume_ma > 0 else 1,
-                }
-
-            return indicators
-
         except Exception as e:
-            print(f'计算指标时出错: {e}')
+            print(f'计算价格波动特征失败: {e}')
             return {}
 
-    def analyze_price_pattern(self, kline_data: List[Dict]) -> Dict:
-        """分析价格形态"""
-        close_prices = np.array([k['close'] for k in kline_data])
-        high_prices = np.array([k['high'] for k in kline_data])
-        low_prices = np.array([k['low'] for k in kline_data])
+    def _analyze_trend(self, df: pd.DataFrame) -> Dict:
+        """分析趋势特征"""
+        try:
+            close = df['Close'].values
+            ma5 = talib.SMA(close, timeperiod=5)
+            ma10 = talib.SMA(close, timeperiod=10)
+            ma20 = talib.SMA(close, timeperiod=20)
 
-        patterns = {}
+            current_price = close[-1]
+            trend_strength = 0
 
-        # 检测双底形态
-        patterns['double_bottom'] = self._check_double_bottom(low_prices[-30:])
+            # 计算趋势强度
+            if current_price > ma5[-1] > ma10[-1] > ma20[-1]:
+                trend_strength = 100
+            elif current_price > ma5[-1] > ma10[-1]:
+                trend_strength = 75
+            elif current_price > ma5[-1]:
+                trend_strength = 50
+            elif current_price < ma5[-1] < ma10[-1] < ma20[-1]:
+                trend_strength = 0
+            elif current_price < ma5[-1] < ma10[-1]:
+                trend_strength = 25
 
-        # 检测双顶形态
-        patterns['double_top'] = self._check_double_top(high_prices[-30:])
+            return {
+                'strength': trend_strength,
+                'direction': 'up' if trend_strength > 50 else 'down',
+                'ma_alignment': trend_strength >= 75,
+            }
+        except Exception as e:
+            print(f'分析趋势失败: {e}')
+            return {
+                'strength': 50,
+                'direction': 'neutral',
+                'ma_alignment': False,
+            }
 
-        # 检测趋势强度
-        patterns['trend'] = self._analyze_trend_strength(close_prices[-20:])
+    def _calculate_keltner_channels(self, df: pd.DataFrame) -> Dict:
+        """计算肯特纳通道"""
+        try:
+            typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+            ma20 = talib.EMA(typical_price, timeperiod=20)
+            atr = talib.ATR(df['High'], df['Low'], df['Close'], timeperiod=20)
 
-        return patterns
+            upper = ma20 + (2 * atr)
+            lower = ma20 - (2 * atr)
 
-    def generate_trading_signals(
-        self,
-        indicators: Dict,
-        patterns: Dict,
-        price: float,
-        key_levels: Dict,
-        volume_data: Dict,
-    ) -> List[Dict]:
-        """生成交易信号"""
-        signals = []
+            return {
+                'upper': upper.iloc[-1],
+                'middle': ma20.iloc[-1],
+                'lower': lower.iloc[-1],
+            }
+        except Exception as e:
+            print(f'计算肯特纳通道失败: {e}')
+            return {'upper': 0, 'middle': 0, 'lower': 0}
 
-        # 计算综合得分 (0-100)
-        technical_score = self._calculate_technical_score(indicators)
-        pattern_score = self._calculate_pattern_score(patterns)
-        support_resistance_score = self._calculate_sr_score(price, key_levels)
-        volume_score = self._calculate_volume_score(volume_data)
-
-        # 综合得分加权计算
-        total_score = (
-            technical_score * 0.4
-            + pattern_score * 0.2
-            + support_resistance_score * 0.25
-            + volume_score * 0.15
-        )
-
-        # 根据得分生成信号
-        if total_score >= 75:
-            signals.append(
-                {
-                    'type': 'strong_buy',
-                    'score': total_score,
-                    'reason': self._generate_signal_reason(
-                        indicators, patterns, key_levels, volume_data, 'buy'
-                    ),
-                }
-            )
-        elif total_score >= 60:
-            signals.append(
-                {
-                    'type': 'buy',
-                    'score': total_score,
-                    'reason': self._generate_signal_reason(
-                        indicators, patterns, key_levels, volume_data, 'buy'
-                    ),
-                }
-            )
-        elif total_score <= 25:
-            signals.append(
-                {
-                    'type': 'strong_sell',
-                    'score': total_score,
-                    'reason': self._generate_signal_reason(
-                        indicators, patterns, key_levels, volume_data, 'sell'
-                    ),
-                }
-            )
-        elif total_score <= 40:
-            signals.append(
-                {
-                    'type': 'sell',
-                    'score': total_score,
-                    'reason': self._generate_signal_reason(
-                        indicators, patterns, key_levels, volume_data, 'sell'
-                    ),
-                }
-            )
-
-        return signals
+    def analyze_key_levels(
+        self, df: pd.DataFrame, current_price: float
+    ) -> Dict:
+        """Wrapper for LevelsFinder's key levels analysis"""
+        return self.levels_finder.find_key_levels(df, current_price)
 
     def _calculate_technical_score(self, indicators: Dict) -> float:
-        """计算技术指标得分"""
-        score = 50  # 基础分
+        """改进技术得分计算"""
+        score = 50
 
         try:
-            # RSI信号(0-20)
-            if 'rsi' in indicators:
+            # RSI分析
+            if 'rsi' in indicators and indicators['rsi'] is not None:
                 rsi = indicators['rsi']
                 if rsi < 30:
                     score += 20 * (30 - rsi) / 30
                 elif rsi > 70:
                     score -= 20 * (rsi - 70) / 30
+                elif 40 <= rsi <= 60:  # 添加中性区间判断
+                    score += 10
 
-            # MACD信号(0-20)
+            # MACD分析
             if 'macd' in indicators:
                 macd = indicators['macd']
-                if macd['hist'] > 0 and macd['macd'] > macd['signal']:
-                    score += 20
-                elif macd['hist'] < 0 and macd['macd'] < macd['signal']:
-                    score -= 20
+                if all(v is not None for v in macd.values()):
+                    if macd['hist'] > 0:
+                        score += min(15, abs(macd['hist']) * 100)  # 降低MACD的权重
+                    else:
+                        score -= min(15, abs(macd['hist']) * 100)
 
-            # 布林带信号(0-20)
-            if 'bollinger' in indicators and all(
-                k in indicators['bollinger']
-                for k in ['upper', 'middle', 'lower']
-            ):
-                bb = indicators['bollinger']
-                current_price = indicators.get(
-                    'current_price', bb['middle']
-                )  # 使用middle price作为默认值
-                bb_position = (current_price - bb['lower']) / (
-                    bb['upper'] - bb['lower']
-                )
-                if bb_position < 0.2:
-                    score += 20 * (1 - bb_position / 0.2)
-                elif bb_position > 0.8:
-                    score -= 20 * (bb_position - 0.8) / 0.2
-
-            # KDJ信号(0-20)
+            # KDJ分析
             if 'kdj' in indicators and all(
-                k in indicators['kdj'] for k in ['k', 'd']
+                v is not None for v in indicators['kdj'].values()
             ):
                 kdj = indicators['kdj']
-                if kdj['k'] < 20 and kdj['k'] > kdj['d']:
-                    score += 20
-                elif kdj['k'] > 80 and kdj['k'] < kdj['d']:
-                    score -= 20
+                if kdj['j'] < 20:
+                    score += 15
+                elif kdj['j'] > 80:
+                    score -= 15
 
-            # 均线多空(0-20)
-            if 'ma' in indicators:
-                ma = indicators['ma']
-                ma_score = 0
-                if all(k in ma for k in [5, 10, 20, 50]):
-                    if ma[5] > ma[10] > ma[20] > ma[50]:
-                        ma_score = 20
-                    elif ma[5] < ma[10] < ma[20] < ma[50]:
-                        ma_score = -20
-                    score += ma_score
+            # 趋势分析
+            if 'trend' in indicators:
+                trend = indicators['trend']
+                score += (trend['strength'] - 50) * 0.3  # 添加趋势影响
+
+            # 波动性分析
+            if 'volatility' in indicators:
+                vol = indicators['volatility']
+                if vol.get('atr_percent', 0) > 5:  # 高波动性降分
+                    score -= 10
+
+            return max(0, min(100, score))
 
         except Exception as e:
-            print(f'计算技术得分时出错: {e}')
-            return 50  # 发生错误时返回中性分数
+            print(f'计算技术得分出错: {e}')
+            return 50
 
-        return max(0, min(100, score))  # 确保分数在0-100之间
+    def generate_trading_signals(
+        self,
+        indicators: Dict,
+        price: float,
+        key_levels: Dict,
+        volume_data: Dict,
+    ) -> List[Dict]:
+        """改进信号生成逻辑"""
+        signals = []
 
-    def _calculate_pattern_score(self, patterns: Dict) -> float:
-        """计算形态分析得分"""
-        score = 50  # 基础分
+        try:
+            # 计算各维度得分
+            technical_score = self._calculate_technical_score(indicators)
+            support_resistance_score = self._evaluate_sr_score(
+                price, key_levels
+            )
+            volume_score = self._evaluate_volume_quality(volume_data)
 
-        if patterns['double_bottom']:
-            score += 25
-        if patterns['double_top']:
-            score -= 25
+            # 调整权重计算
+            total_score = (
+                technical_score * 0.45
+                + support_resistance_score * 0.30  # 降低技术面权重
+                + volume_score * 0.25  # 提高成交量权重
+            )
 
-        trend = patterns['trend']
-        if trend['strength'] == 'strong_up':
-            score += 25
-        elif trend['strength'] == 'weak_up':
-            score += 15
-        elif trend['strength'] == 'strong_down':
-            score -= 25
-        elif trend['strength'] == 'weak_down':
-            score -= 15
+            # 确定信号类型
+            if total_score >= 80 and volume_score >= 70:  # 提高强买要求
+                signal_type = 'strong_buy'
+            elif total_score >= 65:
+                signal_type = 'buy'
+            elif total_score <= 20 and volume_score <= 30:
+                signal_type = 'strong_sell'
+            elif total_score <= 35:
+                signal_type = 'sell'
+            else:
+                return []
 
-        return max(0, min(100, score))
+            signals.append(
+                {
+                    'type': signal_type,
+                    'score': total_score,
+                    'price': price,
+                    'technical_score': technical_score,
+                    'sr_score': support_resistance_score,
+                    'volume_score': volume_score,
+                    'risk_level': self._assess_risk_level(
+                        technical_score, support_resistance_score, volume_score
+                    ),
+                    'reason': self._generate_signal_reason(
+                        indicators, key_levels, volume_data, signal_type
+                    ),
+                }
+            )
 
-    def _calculate_sr_score(self, price: float, key_levels: Dict) -> float:
-        """计算支撑压力位得分"""
-        score = 50  # 基础分
+            return signals
 
-        # 检查最近的支撑位
+        except Exception as e:
+            print(f'生成交易信号出错: {e}')
+            return []
+
+    def _assess_risk_level(
+        self, technical_score: float, sr_score: float, volume_score: float
+    ) -> str:
+        """评估风险等级"""
+        try:
+            # 计算综合风险分数
+            risk_score = (
+                (100 - technical_score) * 0.4
+                + (100 - sr_score) * 0.3
+                + (100 - volume_score) * 0.3
+            )
+
+            if risk_score >= 70:
+                return 'high'
+            elif risk_score >= 40:
+                return 'medium'
+            else:
+                return 'low'
+
+        except Exception as e:
+            print(f'评估风险等级出错: {e}')
+            return 'high'  # 出错时返回高风险
+
+    def _evaluate_sr_score(self, price: float, key_levels: Dict) -> float:
+        """Evaluates support/resistance score"""
+        score = 50
+
         supports = key_levels.get('supports', [])
+        resistances = key_levels.get('resistances', [])
+
+        # Check support levels
         if supports:
             nearest_support = min(supports, key=lambda x: abs(x - price))
-            if 0.99 <= price / nearest_support <= 1.01:
+            distance_to_support = abs(price - nearest_support) / price
+            if distance_to_support <= 0.01:  # Within 1%
                 score += 30
-            elif 0.95 <= price / nearest_support <= 0.99:
+            elif distance_to_support <= 0.02:  # Within 2%
                 score += 20
 
-        # 检查最近的阻力位
-        resistances = key_levels.get('resistances', [])
+        # Check resistance levels
         if resistances:
             nearest_resistance = min(resistances, key=lambda x: abs(x - price))
-            if 0.99 <= price / nearest_resistance <= 1.01:
+            distance_to_resistance = abs(price - nearest_resistance) / price
+            if distance_to_resistance <= 0.01:
                 score -= 30
-            elif 1.01 <= price / nearest_resistance <= 1.05:
+            elif distance_to_resistance <= 0.02:
                 score -= 20
 
         return max(0, min(100, score))
 
-    def _calculate_volume_score(self, volume_data: Dict) -> float:
-        """计算成交量分析得分"""
+    def _evaluate_volume_quality(self, volume_data: Dict) -> float:
+        """改进成交量质量评估"""
+        score = 50
+
         try:
-            score = 50  # 基础分
+            volume_ratio = volume_data.get('ratio', 1)
+            pressure_ratio = volume_data.get('pressure_ratio', 1)
 
-            # 检查volume_data是否为空
-            if not volume_data:
-                return score
+            # 成交量比率分析
+            if volume_ratio > 5:  # 过度放量
+                score += 15  # 降低极端放量的得分
+            elif volume_ratio > 2:
+                score += 25
+            elif volume_ratio > 1.5:
+                score += 15
+            elif volume_ratio < 0.5:
+                score -= 25
+            elif volume_ratio < 0.7:
+                score -= 15
 
-            # 获取成交量比率，如果没有，则尝试计算
-            volume_ratio = volume_data.get('ratio')
-            if (
-                volume_ratio is None
-                and 'current_volume' in volume_data
-                and 'avg_volume' in volume_data
-            ):
-                volume_ratio = (
-                    volume_data['current_volume'] / volume_data['avg_volume']
-                    if volume_data['avg_volume'] > 0
-                    else 1
-                )
+            # 买卖压力分析
+            if pressure_ratio > 3:  # 过度买压
+                score += 15  # 降低极端买压的得分
+            elif pressure_ratio > 1.5:
+                score += 25
+            elif pressure_ratio > 1.2:
+                score += 15
+            elif pressure_ratio < 0.5:
+                score -= 25
+            elif pressure_ratio < 0.8:
+                score -= 15
 
-            # 获取买卖压力比例
-            bid_volume = volume_data.get('bid_volume', 0)
-            ask_volume = volume_data.get('ask_volume', 0)
-            bid_ask_ratio = bid_volume / ask_volume if ask_volume > 0 else 1
-
-            # 评估成交量变化
-            if volume_ratio is not None:
-                if volume_ratio > 2:
-                    score += 25
-                elif volume_ratio > 1.5:
-                    score += 15
-                elif volume_ratio < 0.5:
-                    score -= 25
-                elif volume_ratio < 0.7:
-                    score -= 15
-
-            # 评估买卖压力
-            if bid_volume > 0 or ask_volume > 0:  # 只有在有买卖量数据时才评估
-                if bid_ask_ratio > 1.5:
-                    score += 25
-                elif bid_ask_ratio > 1.2:
-                    score += 15
-                elif bid_ask_ratio < 0.67:  # 1/1.5
-                    score -= 25
-                elif bid_ask_ratio < 0.83:  # 1/1.2
-                    score -= 15
-
-            return max(0, min(100, score))  # 确保得分在0-100之间
+            return max(0, min(100, score))
 
         except Exception as e:
-            print(f'计算成交量得分时出错: {e}')
-            return 50  # 发生错误时返回中性分数
+            print(f'评估成交量质量出错: {e}')
+            return 50
 
     def _generate_signal_reason(
         self,
         indicators: Dict,
-        patterns: Dict,
         key_levels: Dict,
         volume_data: Dict,
         signal_type: str,
     ) -> str:
-        """生成信号原因说明"""
+        """Generates detailed reason for the signal"""
         reasons = []
 
-        if signal_type == 'buy':
-            if indicators['rsi'] < 30:
-                reasons.append(f"RSI超卖({indicators['rsi']:.1f})")
-            if indicators['macd']['hist'] > 0:
+        # Technical indicators
+        if 'rsi' in indicators:
+            rsi = indicators['rsi']
+            if rsi < 30 and signal_type.endswith('buy'):
+                reasons.append(f'RSI超卖({rsi:.1f})')
+            elif rsi > 70 and signal_type.endswith('sell'):
+                reasons.append(f'RSI超买({rsi:.1f})')
+
+        # MACD
+        if 'macd' in indicators:
+            macd = indicators['macd']
+            if macd['hist'] > 0 and signal_type.endswith('buy'):
                 reasons.append('MACD金叉')
-            if patterns.get('double_bottom'):
-                reasons.append('形成双底形态')
-            if volume_data['ratio'] > 1.5:
-                reasons.append(f"成交量放大{volume_data['ratio']:.1f}倍")
-
-        else:  # sell
-            if indicators['rsi'] > 70:
-                reasons.append(f"RSI超买({indicators['rsi']:.1f})")
-            if indicators['macd']['hist'] < 0:
+            elif macd['hist'] < 0 and signal_type.endswith('sell'):
                 reasons.append('MACD死叉')
-            if patterns.get('double_top'):
-                reasons.append('形成双顶形态')
-            if volume_data['ratio'] < 0.7:
-                reasons.append(f"成交量萎缩{1/volume_data['ratio']:.1f}倍")
 
-        return '，'.join(reasons)
+        # Volume
+        volume_ratio = volume_data.get('ratio', 1)
+        if volume_ratio > 1.5 and signal_type.endswith('buy'):
+            reasons.append(f'成交量放大{volume_ratio:.1f}倍')
+        elif volume_ratio < 0.7 and signal_type.endswith('sell'):
+            reasons.append(f'成交量萎缩{1/volume_ratio:.1f}倍')
 
-    def _check_double_bottom(self, prices: np.ndarray) -> bool:
-        """检测双底形态"""
-        # 实现双底形态检测逻辑
-        peaks, _ = find_peaks(-prices)  # 寻找低点
-        if len(peaks) < 2:
-            return False
-
-        # 检查最后两个低点是否符合双底特征
-        last_two_bottoms = prices[peaks[-2:]]
-        if len(last_two_bottoms) == 2:
-            price_diff = abs(last_two_bottoms[0] - last_two_bottoms[1])
-            avg_price = (last_two_bottoms[0] + last_two_bottoms[1]) / 2
-            if price_diff / avg_price < 0.02:  # 价差小于2%
-                return True
-
-        return False
-
-    def _check_double_top(self, prices: np.ndarray) -> bool:
-        """检测双顶形态"""
-        peaks, _ = find_peaks(prices)  # 寻找高点
-        if len(peaks) < 2:
-            return False
-
-        # 检查最后两个高点是否符合双顶特征
-        last_two_tops = prices[peaks[-2:]]
-        if len(last_two_tops) == 2:
-            price_diff = abs(last_two_tops[0] - last_two_tops[1])
-            avg_price = (last_two_tops[0] + last_two_tops[1]) / 2
-            if price_diff / avg_price < 0.02:  # 价差小于2%
-                return True
-
-        return False
-
-    def _analyze_trend_strength(self, prices: np.ndarray) -> Dict:
-        """分析趋势强度"""
-        # 计算价格变化率
-        price_changes = np.diff(prices) / prices[:-1]
-
-        # 计算趋势强度
-        trend_strength = np.mean(price_changes) * 100
-
-        if trend_strength > 0.5:
-            return {'strength': 'strong_up', 'value': trend_strength}
-        elif trend_strength > 0.1:
-            return {'strength': 'weak_up', 'value': trend_strength}
-        elif trend_strength < -0.5:
-            return {'strength': 'strong_down', 'value': trend_strength}
-        elif trend_strength < -0.1:
-            return {'strength': 'weak_down', 'value': trend_strength}
-        else:
-            return {'strength': 'neutral', 'value': trend_strength}
+        return '，'.join(reasons) if reasons else '技术面综合信号'
