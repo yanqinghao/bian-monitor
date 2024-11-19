@@ -29,6 +29,7 @@ class CryptoAnalyzer:
 
             # 分析4小时数据作为主要参考
             df_4h = self.data['4h']
+            df_1h = self.data['1h']
             current_price = df_4h['Close'].iloc[-1]
 
             # 计算24小时涨跌幅
@@ -53,7 +54,7 @@ class CryptoAnalyzer:
             )
 
             # 计算关键价位
-            key_levels = LevelsFinder.find_key_levels(df_4h, current_price)
+            key_levels = LevelsFinder.find_key_levels(df_1h, current_price)
 
             # 生成交易策略
             trading_strategy = ReportGenerator.generate_signal_based_strategy(
