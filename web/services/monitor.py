@@ -319,88 +319,54 @@ class MarketMonitor:
             print(f'准备成交量数据时出错: {e}')
             return {}
 
-    def _output_signals(
-        self,
-        symbol: str,
-        signals: List[Dict],
-        current_time: datetime,
-        current_price: float,
-        volume_data: Dict,
-    ):
-        """改进信号输出"""
+    def _output_signals(self, symbol: str, signals: List[Dict], current_time: datetime,
+                   current_price: float, volume_data: Dict):
+        """Console only output signals"""
         if not signals:
             return
 
-        # 检查冷却时间
+        # Check cooldown
         if symbol in self.last_alert_time:
-            # 根据信号类型调整冷却时间
-            cooldown = 300  # 默认5分钟
-            for signal in signals:
-                if signal['type'] in ['strong_buy', 'strong_sell']:
-                    cooldown = 180  # 强信号3分钟
-
-            if (
-                current_time - self.last_alert_time[symbol]
-            ).total_seconds() < cooldown:
+            cooldown = 180 if any(s['type'] in ['strong_buy', 'strong_sell'] for s in signals) else 300
+            if (current_time - self.last_alert_time[symbol]).total_seconds() < cooldown:
                 return
 
         print(f'\n{"="*50}')
-        print(
-            f'交易对: {symbol.upper()} - 时间: {current_time.strftime("%Y-%m-%d %H:%M:%S")}'
-        )
+        print(f'交易对: {symbol.upper()} - 时间: {current_time.strftime("%Y-%m-%d %H:%M:%S")}')
         print(f'当前价格: {current_price:.8f}')
 
         if volume_data:
-            if 'ratio' in volume_data:
-                volume_color = '🔴' if volume_data['ratio'] > 2 else '⚪️'
-                print(f'成交量比率: {volume_color} {volume_data["ratio"]:.2f}')
-            if 'pressure_ratio' in volume_data:
-                pressure_color = (
-                    '🔴'
-                    if volume_data['pressure_ratio'] > 1.5
-                    else ('🔵' if volume_data['pressure_ratio'] < 0.7 else '⚪️')
-                )
-                print(
-                    f'买卖比: {pressure_color} {volume_data["pressure_ratio"]:.2f}'
-                )
+            volume_color = '🔴' if volume_data.get('ratio', 1) > 2 else '⚪️'
+            pressure_color = '🔴' if volume_data.get('pressure_ratio', 1) > 1.5 else (
+                '🔵' if volume_data.get('pressure_ratio', 1) < 0.7 else '⚪️'
+            )
+            print(f'成交量比率: {volume_color} {volume_data["ratio"]:.2f}')
+            print(f'买卖比: {pressure_color} {volume_data["pressure_ratio"]:.2f}')
 
         for signal in signals:
             signal_type_map = {
                 'strong_buy': '🔥🔥🔥 强力买入',
                 'buy': '📈 买入',
                 'sell': '📉 卖出',
-                'strong_sell': '❄️❄️❄️ 强力卖出',
+                'strong_sell': '❄️❄️❄️ 强力卖出'
             }
-            signal_type = signal_type_map.get(signal['type'], '🔍 观察')
-
-            print(f'\n信号类型: {signal_type}')
+            
+            print(f"\n信号类型: {signal_type_map.get(signal['type'], '🔍 观察')}")
             print(f"信号强度: {signal['score']:.1f}/100")
             print(f"技术得分: {signal.get('technical_score', 0):.1f}")
             print(f"支阻得分: {signal.get('sr_score', 0):.1f}")
             print(f"成交量得分: {signal.get('volume_score', 0):.1f}")
-
-            # 添加风险等级显示
-            risk_level_map = {
-                'high': '⚠️ 高风险',
-                'medium': '⚡️ 中等风险',
-                'low': '✅ 低风险',
-            }
+            
             if 'risk_level' in signal:
-                print(
-                    f"风险等级: {risk_level_map.get(signal['risk_level'], '未知风险')}"
-                )
-
+                risk_level_map = {
+                    'high': '⚠️ 高风险',
+                    'medium': '⚡️ 中等风险',
+                    'low': '✅ 低风险'
+                }
+                print(f"风险等级: {risk_level_map.get(signal['risk_level'], '未知风险')}")
+            
             if 'reason' in signal:
                 print(f"触发原因: {signal['reason']}")
-
-        # 发送 Telegram 通知
-        if self.telegram and any(
-            signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']
-            for signal in signals
-        ):
-            self._send_telegram_alerts(
-                symbol, signals, current_price, volume_data
-            )
 
         self.last_alert_time[symbol] = current_time
         print(f'{"="*50}\n')
@@ -539,16 +505,55 @@ class MarketMonitor:
                 time.sleep(60)  # 出错后等待1分钟再试
 
     def _analysis_loop(self):
-        """Main analysis loop"""
+        """Main analysis loop with batch signals"""
         while self.running.is_set():
             try:
                 current_time = datetime.now()
+                batch_signals = []
+                
                 for symbol in self.symbols:
                     with self.data_lock:
                         if symbol in self.latest_data:
-                            self._analyze_symbol(symbol, current_time)
+                            current_price = self.latest_data[symbol]['price']
+                            kline_data = list(self.kline_buffers[symbol])
+                            volume_data = self._prepare_volume_data(symbol)
+                            
+                            if not kline_data or not volume_data:
+                                continue
 
-                time.sleep(10)  # Analysis interval
+                            indicators = self.technical_analyzer.calculate_indicators(kline_data)
+                            signals = self.technical_analyzer.generate_trading_signals(
+                                indicators=indicators,
+                                price=current_price,
+                                key_levels=self.key_levels.get(symbol, {}),
+                                volume_data=volume_data
+                            )
+                            
+                            for signal in signals:
+                                if signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']:
+                                    batch_signals.append({
+                                        'symbol': symbol,
+                                        'price': current_price,
+                                        'signal_type': signal['type'],
+                                        'score': signal['score'],
+                                        'technical_score': signal.get('technical_score', 0),
+                                        'volume_data': volume_data,
+                                        'risk_level': signal.get('risk_level', 'medium'),
+                                        'reason': signal.get('reason', '')
+                                    })
+                                    
+                            # Console output as before
+                            if signals:
+                                self._output_signals(symbol, signals, current_time, current_price, volume_data)
+                            
+                            # Monitor movements
+                            self._monitor_abnormal_movements(symbol, indicators, volume_data)
+                
+                # Send batch signals if any
+                if batch_signals and self.telegram:
+                    self.telegram.send_batch_signals(batch_signals)
+                    
+                time.sleep(10)
 
             except Exception as e:
                 print(f'分析过程出错: {e}')

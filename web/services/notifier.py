@@ -1,6 +1,6 @@
 import requests
 import logging
-from typing import Optional
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -101,3 +101,46 @@ class TelegramNotifier:
             message.append("\n⚡️ 风险提示: 注意量能过度放大带来的回撤风险")
 
         return '\n'.join(message)
+    
+    def format_batch_signals(self, signals_data: List[Dict]) -> str:
+        """Format multiple signals into one message"""
+        message_parts = [f"<b>{'='*20} 市场信号汇总 {'='*20}</b>\n"]
+        
+        for data in signals_data:
+            signal_emoji = {
+                'sell': '📉 卖出',
+                'buy': '📈 买入',
+                'strong_buy': '🔥🔥🔥 强力买入',
+                'strong_sell': '❄️❄️❄️ 强力卖出'
+            }
+            
+            volume_data = data.get('volume_data', {})
+            volume_color = '🔴' if volume_data.get('ratio', 1) > 2 else '⚪️'
+            pressure_color = '🔴' if volume_data.get('pressure_ratio', 1) > 1.5 else (
+                '🔵' if volume_data.get('pressure_ratio', 1) < 0.7 else '⚪️')
+                
+            signal_part = [
+                f"\n<b>{data['symbol'].upper()}</b>",
+                f"💰 价格: {data['price']:.4f}",
+                f"📈 信号: {signal_emoji.get(data['signal_type'], data['signal_type'])}",
+                f"💪 强度: {data['score']:.1f}",
+                f"📊 技术: {data.get('technical_score', 0):.1f}",
+                f"🔄 成交量: {volume_color}{volume_data.get('ratio', 1):.2f}",
+                f"⚖️ 买卖比: {pressure_color}{volume_data.get('pressure_ratio', 1):.2f}",
+                f"⚠️ 风险: {data.get('risk_level', 'medium')}",
+                f"💡 原因: {data.get('reason', '技术面信号')}"
+            ]
+            
+            message_parts.append('\n'.join(signal_part))
+            message_parts.append('-' * 30)
+        
+        message_parts.append(f"\n⏰ 更新时间: {datetime.now().strftime('%H:%M:%S')}")
+        return '\n'.join(message_parts)
+    
+    def send_batch_signals(self, signals_data: List[Dict]) -> bool:
+        """Send all signals in one message"""
+        if not signals_data:
+            return True
+            
+        message = self.format_batch_signals(signals_data)
+        return self.send_message(message)
