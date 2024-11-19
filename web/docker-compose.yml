@@ -9,4 +9,6 @@ services:
       - BINANCE_PROXY=  # 你可以在这里设置代理
     volumes:
       - .:/app
+    env_file:
+      - .env
     restart: always
