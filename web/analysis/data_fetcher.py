@@ -5,7 +5,7 @@ import pandas as pd
 
 class DataFetcher:
     @staticmethod
-    def get_kline_data(symbol, interval, days):
+    def get_kline_data(symbol, interval, days, limit=1000):
         """获取K线数据"""
         url = 'https://api.binance.com/api/v3/klines'
         end_time = int(datetime.now().timestamp() * 1000)
@@ -18,7 +18,7 @@ class DataFetcher:
             'interval': interval,
             'startTime': start_time,
             'endTime': end_time,
-            'limit': 1000,
+            'limit': limit,
         }
 
         try:

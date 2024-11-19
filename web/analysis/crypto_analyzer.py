@@ -18,6 +18,27 @@ class CryptoAnalyzer:
         }
         self.data = {}
 
+    def analyze_key_level(self):
+        """执行完整分析并生成指定格式的JSON数据"""
+        try:
+            # 获取数据
+            df_1h = DataFetcher.get_kline_data(self.symbol, '1h', 15)
+            current_price = df_1h['Close'].iloc[-1]
+
+            # 计算关键价位
+            key_levels = LevelsFinder.find_key_levels(df_1h, current_price)
+
+            # 构建最终JSON
+            result = {
+                'resistances': [float(x) for x in key_levels['resistances']],
+                'supports': [float(x) for x in key_levels['supports']],
+            }
+
+            return result
+
+        except Exception as e:
+            return {'error': True, 'message': str(e)}
+
     def analyze(self):
         """执行完整分析并生成指定格式的JSON数据"""
         try:
@@ -30,11 +51,11 @@ class CryptoAnalyzer:
             # 分析4小时数据作为主要参考
             df_4h = self.data['4h']
             df_1h = self.data['1h']
-            current_price = df_4h['Close'].iloc[-1]
+            current_price = df_1h['Close'].iloc[-1]
 
             # 计算24小时涨跌幅
             change_24h = (
-                (df_4h['Close'].iloc[-1] / df_4h['Close'].iloc[-6]) - 1
+                (df_1h['Close'].iloc[-1] / df_1h['Close'].iloc[-24]) - 1
             ) * 100
 
             # 计算各周期指标
