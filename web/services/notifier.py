@@ -82,6 +82,7 @@ class TelegramNotifier:
         """
         # 信号类型映射
         signal_emoji = {
+            'sell': '📉 卖出',
             'buy': '📈 买入',
             'strong_buy': '🔥🔥🔥 强力买入',
             'strong_sell': '❄️❄️❄️ 强力卖出',
@@ -110,7 +111,7 @@ class TelegramNotifier:
         # 添加触发原因
         if reasons:
             reason_list = [f'- {reason}' for reason in reasons]
-            message.append(f'\n📝 触发原因:\n' + '\n'.join(reason_list))
+            message.append('\n📝 触发原因:\n' + '\n'.join(reason_list))
 
         # 添加操作建议
         if action_guide:

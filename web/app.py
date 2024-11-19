@@ -1,19 +1,114 @@
 import os
 import json
-from flask import Response
-from flask import Flask, send_from_directory, request, send_file, jsonify
+from flask import (
+    Response,
+    Flask,
+    send_from_directory,
+    request,
+    send_file,
+    jsonify,
+)
 import requests
 import csv
 from datetime import datetime, timedelta
 import tempfile
 import zipfile
 import io
+import threading
 from analysis.crypto_analyzer import CryptoAnalyzer
+from services.monitor import MarketMonitor
 
 app = Flask(__name__, static_folder='statics', static_url_path='')
+app.config['JSON_AS_ASCII'] = False
 
-app.config['JSON_AS_ASCII'] = False  # 这行是关键
+# 创建全局的 MarketMonitor 实例
+market_monitor = None
 
+
+def start_market_monitor():
+    """
+    在单独的线程中启动市场监控
+    """
+    global market_monitor
+    try:
+        market_monitor = MarketMonitor()
+        market_monitor.start_monitoring()
+        print('\n市场监控已启动')
+    except Exception as e:
+        print(f'启动市场监控失败: {e}')
+
+
+def initialize_monitor():
+    """
+    初始化并启动市场监控
+    """
+    monitor_thread = threading.Thread(target=start_market_monitor)
+    monitor_thread.daemon = True  # 设置为守护线程，这样主程序退出时会自动关闭
+    monitor_thread.start()
+
+
+# 使用 with app.app_context() 在应用启动时初始化监控器
+def init_app(app):
+    with app.app_context():
+        initialize_monitor()
+
+
+# 添加一个停止监控的路由
+@app.route('/stop_monitor', methods=['POST'])
+def stop_monitor():
+    """
+    停止市场监控
+    """
+    global market_monitor
+    if market_monitor:
+        try:
+            market_monitor.stop()
+            market_monitor = None
+            return jsonify({'status': 'success', 'message': '市场监控已停止'})
+        except Exception as e:
+            return (
+                jsonify({'status': 'error', 'message': f'停止监控失败: {str(e)}'}),
+                500,
+            )
+    return jsonify({'status': 'warning', 'message': '监控未启动'})
+
+
+# 添加一个启动监控的路由
+@app.route('/start_monitor', methods=['POST'])
+def start_monitor():
+    """
+    启动市场监控
+    """
+    global market_monitor
+    if not market_monitor:
+        try:
+            initialize_monitor()
+            return jsonify({'status': 'success', 'message': '市场监控已启动'})
+        except Exception as e:
+            return (
+                jsonify({'status': 'error', 'message': f'启动监控失败: {str(e)}'}),
+                500,
+            )
+    return jsonify({'status': 'warning', 'message': '监控已在运行'})
+
+
+# 添加一个获取监控状态的路由
+@app.route('/monitor_status', methods=['GET'])
+def monitor_status():
+    """
+    获取监控状态
+    """
+    global market_monitor
+    is_running = bool(market_monitor and market_monitor.running.is_set())
+    return jsonify(
+        {
+            'status': 'running' if is_running else 'stopped',
+            'message': '监控正在运行' if is_running else '监控已停止',
+        }
+    )
+
+
+# 原有的路由和配置保持不变
 TIMEFRAMES = {
     '3d_1200': ('3d', 1200),
     '1d_365': ('1d', 365),
@@ -39,7 +134,6 @@ COMMON_SYMBOLS = [
     'BCHUSDT',
 ]
 
-# Global proxy settings
 PROXY = os.environ.get('BINANCE_PROXY', None)
 PROXIES = {'http': PROXY, 'https': PROXY}
 
@@ -162,5 +256,8 @@ def get_common_symbols():
     return jsonify(COMMON_SYMBOLS)
 
 
+# 在应用启动时初始化监控
+init_app(app)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)  # 在生产环境中使用debug=False

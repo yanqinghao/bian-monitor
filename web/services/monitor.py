@@ -1475,16 +1475,18 @@ class MarketMonitor:
             if 'action_guide' in signal:
                 print(f"操作建议: {signal['action_guide']}")
 
-        import pdb
-
-        pdb.set_trace()
         # 发送Telegram通知
         if self.telegram and any(
-            signal['type'] in ['buy', 'strong_buy', 'strong_sell']
+            signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']
             for signal in signals
         ):
             for signal in signals:
-                if signal['type'] in ['buy', 'strong_buy', 'strong_sell']:
+                if signal['type'] in [
+                    'buy',
+                    'sell',
+                    'strong_buy',
+                    'strong_sell',
+                ]:
                     message = self.telegram.format_signal_message(
                         symbol=symbol,
                         signal_type=signal['type'],
