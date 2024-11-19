@@ -5,6 +5,7 @@ import websocket
 import json
 import threading
 import time
+import os
 import queue
 from itertools import chain
 from datetime import datetime
@@ -14,6 +15,11 @@ from services.scan import MarketScanner
 from analysis.data_fetcher import DataFetcher
 from analysis.crypto_analyzer import CryptoAnalyzer
 from analysis.technical_analyzer import TechnicalAnalyzer
+from services.notifier import TelegramNotifier
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class MarketMonitor:
@@ -52,6 +58,20 @@ class MarketMonitor:
         self.scanner = MarketScanner()
         # 新增: 添加技术分析器
         self.technical_analyzer = TechnicalAnalyzer()
+
+        # Telegram配置
+        telegram_token = os.getenv('TELEGRAM_BOT_TOKEN', '')
+        telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
+
+        # 添加Telegram通知服务
+        self.telegram = None
+        if telegram_token and telegram_chat_id:
+            try:
+                self.telegram = TelegramNotifier(
+                    telegram_token, telegram_chat_id
+                )
+            except Exception as e:
+                print(f'初始化Telegram通知服务失败: {e}')
 
     def update_monitoring_list(self):
         """更新监控列表"""
@@ -1455,6 +1475,27 @@ class MarketMonitor:
             if 'action_guide' in signal:
                 print(f"操作建议: {signal['action_guide']}")
 
+        import pdb
+
+        pdb.set_trace()
+        # 发送Telegram通知
+        if self.telegram and any(
+            signal['type'] in ['buy', 'strong_buy', 'strong_sell']
+            for signal in signals
+        ):
+            for signal in signals:
+                if signal['type'] in ['buy', 'strong_buy', 'strong_sell']:
+                    message = self.telegram.format_signal_message(
+                        symbol=symbol,
+                        signal_type=signal['type'],
+                        current_price=current_price,
+                        signal_score=signal['score'],
+                        risk_level=signal['risk_level'],
+                        volume_data=volume_data,
+                        reasons=signal.get('reasons', []),
+                        action_guide=signal.get('action_guide'),
+                    )
+                    self.telegram.send_message(message)
         # 更新最后提醒时间
         self.last_alert_time[symbol] = current_time
         print(f'{"="*50}\n')
