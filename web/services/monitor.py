@@ -708,13 +708,13 @@ class MarketMonitor:
                                     volume_data,
                                 )
 
-                            # 监控异常波动
-                            self._monitor_abnormal_movements(
-                                symbol, indicators, volume_data
-                            )
+                            # # 监控异常波动
+                            # self._monitor_abnormal_movements(
+                            #     symbol, indicators, volume_data
+                            # )
 
-                if self.telegram:
-                    self.telegram.send_alert_message()
+                # if self.telegram:
+                #     self.telegram.send_alert_message()
 
                 # 发送批量信号
                 if batch_signals and self.telegram:
