@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import pandas as pd
 import talib
 from analysis.indicators import TechnicalIndicators
@@ -11,18 +11,67 @@ class TechnicalAnalyzer:
         self.indicator_calculator = TechnicalIndicators()
         self.levels_finder = LevelsFinder()
 
-    def calculate_indicators(self, kline_data: List[Dict]) -> Dict:
-        """优化指标计算，增加更多时间周期"""
-        df = pd.DataFrame(kline_data)
-        df.columns = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume']
+    def calculate_indicators(
+        self,
+        kline_data_4h: List[Dict],
+        kline_data_1h: List[Dict],
+        kline_data_15m: List[Dict] = None,
+    ) -> Dict:
+        """Calculate indicators for 4h, 1h and 15m timeframes"""
+        # 处理4小时数据
+        df_4h = pd.DataFrame(kline_data_4h)
+        df_4h.columns = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume']
+        indicators_4h = self.indicator_calculator.calculate_indicators(df_4h)
+        volatility_4h = self.indicator_calculator.calculate_volatility_metrics(
+            df_4h
+        )
 
-        # 基础指标计算
-        indicators = self.indicator_calculator.calculate_indicators(df)
-        volatility = self.indicator_calculator.calculate_volatility_metrics(df)
+        # 处理1小时数据
+        df_1h = pd.DataFrame(kline_data_1h)
+        df_1h.columns = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume']
+        indicators_1h = self.indicator_calculator.calculate_indicators(df_1h)
+        volatility_1h = self.indicator_calculator.calculate_volatility_metrics(
+            df_1h
+        )
 
-        # 格式化结果并添加更多指标
         formatted_indicators = {
-            'current_price': df['Close'].iloc[-1],
+            'current_price': df_1h['Close'].iloc[-1],
+            '4h': self._format_timeframe_indicators(
+                df_4h, indicators_4h, volatility_4h
+            ),
+            '1h': self._format_timeframe_indicators(
+                df_1h, indicators_1h, volatility_1h
+            ),
+        }
+
+        # 处理15分钟数据(如果有)
+        if kline_data_15m:
+            df_15m = pd.DataFrame(kline_data_15m)
+            df_15m.columns = [
+                'Open time',
+                'Open',
+                'High',
+                'Low',
+                'Close',
+                'Volume',
+            ]
+            indicators_15m = self.indicator_calculator.calculate_indicators(
+                df_15m
+            )
+            volatility_15m = (
+                self.indicator_calculator.calculate_volatility_metrics(df_15m)
+            )
+            formatted_indicators['15m'] = self._format_timeframe_indicators(
+                df_15m, indicators_15m, volatility_15m
+            )
+
+        return formatted_indicators
+
+    def _format_timeframe_indicators(
+        self, df: pd.DataFrame, indicators: Dict, volatility: Dict
+    ) -> Dict:
+        """Format indicators for a specific timeframe"""
+        return {
             'rsi': indicators['rsi'].iloc[-1]
             if len(indicators['rsi']) > 0
             else None,
@@ -48,8 +97,6 @@ class TechnicalAnalyzer:
             },
             'trend': self._analyze_trend(df),
         }
-
-        return formatted_indicators
 
     def _calculate_price_volatility(self, df: pd.DataFrame) -> Dict:
         """计算价格波动特征"""
@@ -128,56 +175,71 @@ class TechnicalAnalyzer:
         """Wrapper for LevelsFinder's key levels analysis"""
         return self.levels_finder.find_key_levels(df, current_price)
 
-    def _calculate_technical_score(self, indicators: Dict) -> float:
-        """改进技术得分计算"""
+    def _calculate_timeframe_score(self, timeframe_data: Dict) -> float:
+        """Calculate score for a single timeframe"""
         score = 50
 
+        # RSI分析
+        if 'rsi' in timeframe_data and timeframe_data['rsi'] is not None:
+            rsi = timeframe_data['rsi']
+            if rsi < 30:
+                score += 20 * (30 - rsi) / 30
+            elif rsi > 70:
+                score -= 20 * (rsi - 70) / 30
+            elif 40 <= rsi <= 60:
+                score += 10
+
+        # MACD分析
+        if 'macd' in timeframe_data:
+            macd = timeframe_data['macd']
+            if all(v is not None for v in macd.values()):
+                if macd['hist'] > 0:
+                    score += min(15, abs(macd['hist']) * 100)
+                else:
+                    score -= min(15, abs(macd['hist']) * 100)
+
+        # KDJ分析
+        if 'kdj' in timeframe_data:
+            kdj = timeframe_data['kdj']
+            if kdj['j'] < 20:
+                score += 15
+            elif kdj['j'] > 80:
+                score -= 15
+
+        # 趋势分析
+        if 'trend' in timeframe_data:
+            trend = timeframe_data['trend']
+            score += (trend['strength'] - 50) * 0.3
+
+        # 波动性分析
+        if 'volatility' in timeframe_data:
+            vol = timeframe_data['volatility']
+            if vol.get('atr_percent', 0) > 5:
+                score -= 10
+
+        return max(0, min(100, score))
+
+    def _calculate_technical_score(
+        self, indicators: Dict
+    ) -> Tuple[float, float, float]:
+        """Calculate technical scores for all timeframes"""
+        score_4h = 50
+        score_1h = 50
+        score_15m = 50
+
         try:
-            # RSI分析
-            if 'rsi' in indicators and indicators['rsi'] is not None:
-                rsi = indicators['rsi']
-                if rsi < 30:
-                    score += 20 * (30 - rsi) / 30
-                elif rsi > 70:
-                    score -= 20 * (rsi - 70) / 30
-                elif 40 <= rsi <= 60:  # 添加中性区间判断
-                    score += 10
+            if '4h' in indicators:
+                score_4h = self._calculate_timeframe_score(indicators['4h'])
+            if '1h' in indicators:
+                score_1h = self._calculate_timeframe_score(indicators['1h'])
+            if '15m' in indicators:
+                score_15m = self._calculate_timeframe_score(indicators['15m'])
 
-            # MACD分析
-            if 'macd' in indicators:
-                macd = indicators['macd']
-                if all(v is not None for v in macd.values()):
-                    if macd['hist'] > 0:
-                        score += min(15, abs(macd['hist']) * 100)  # 降低MACD的权重
-                    else:
-                        score -= min(15, abs(macd['hist']) * 100)
-
-            # KDJ分析
-            if 'kdj' in indicators and all(
-                v is not None for v in indicators['kdj'].values()
-            ):
-                kdj = indicators['kdj']
-                if kdj['j'] < 20:
-                    score += 15
-                elif kdj['j'] > 80:
-                    score -= 15
-
-            # 趋势分析
-            if 'trend' in indicators:
-                trend = indicators['trend']
-                score += (trend['strength'] - 50) * 0.3  # 添加趋势影响
-
-            # 波动性分析
-            if 'volatility' in indicators:
-                vol = indicators['volatility']
-                if vol.get('atr_percent', 0) > 5:  # 高波动性降分
-                    score -= 10
-
-            return max(0, min(100, score))
+            return score_4h, score_1h, score_15m
 
         except Exception as e:
             print(f'计算技术得分出错: {e}')
-            return 50
+            return 50, 50, 50
 
     def generate_trading_signals(
         self,
@@ -186,32 +248,70 @@ class TechnicalAnalyzer:
         key_levels: Dict,
         volume_data: Dict,
     ) -> List[Dict]:
-        """改进信号生成逻辑"""
+        """Generate trading signals with multi-timeframe analysis"""
         signals = []
 
         try:
-            # 计算各维度得分
-            technical_score = self._calculate_technical_score(indicators)
+            # 计算三个时间周期的技术分
+            (
+                technical_score_4h,
+                technical_score_1h,
+                technical_score_15m,
+            ) = self._calculate_technical_score(indicators)
+
+            # 支撑/阻力分数
             support_resistance_score = self._evaluate_sr_score(
                 price, key_levels
             )
+
+            # 成交量分数
             volume_score = self._evaluate_volume_quality(volume_data)
 
-            # 调整权重计算
+            # 趋势一致性检查
+            trend_alignment = self._check_trend_alignment(indicators)
+
+            # 综合评分 (4h:25%, 1h:20%, 15m:10%, 支撑阻力:25%, 成交量:20%)
             total_score = (
-                technical_score * 0.45
-                + support_resistance_score * 0.30  # 降低技术面权重
-                + volume_score * 0.25  # 提高成交量权重
+                technical_score_4h * 0.25
+                + technical_score_1h * 0.20
+                + technical_score_15m * 0.10
+                + support_resistance_score * 0.25
+                + volume_score * 0.20
             )
 
-            # 确定信号类型
-            if total_score >= 80 and volume_score >= 70:  # 提高强买要求
+            # 加入趋势一致性奖励/惩罚
+            if trend_alignment['aligned']:
+                total_score *= 1.1  # 趋势一致性奖励
+            else:
+                total_score *= 0.9  # 趋势不一致惩罚
+            # 信号判断 (同时考虑趋势一致性)
+            if (
+                total_score >= 80
+                and volume_score >= 70
+                and technical_score_4h >= 65
+                and technical_score_1h >= 65
+                and trend_alignment['aligned']
+            ):
                 signal_type = 'strong_buy'
-            elif total_score >= 65:
+            elif (
+                total_score >= 65
+                and technical_score_4h >= 60
+                and technical_score_1h >= 55
+            ):
                 signal_type = 'buy'
-            elif total_score <= 20 and volume_score <= 30:
+            elif (
+                total_score <= 20
+                and volume_score <= 30
+                and technical_score_4h <= 35
+                and technical_score_1h <= 35
+                and trend_alignment['aligned']
+            ):
                 signal_type = 'strong_sell'
-            elif total_score <= 35:
+            elif (
+                total_score <= 35
+                and technical_score_4h <= 40
+                and technical_score_1h <= 45
+            ):
                 signal_type = 'sell'
             else:
                 return []
@@ -221,23 +321,58 @@ class TechnicalAnalyzer:
                     'type': signal_type,
                     'score': total_score,
                     'price': price,
-                    'technical_score': technical_score,
+                    'technical_score': {
+                        '4h': technical_score_4h,
+                        '1h': technical_score_1h,
+                        '15m': technical_score_15m,
+                    },
+                    'trend_alignment': trend_alignment['status'],
                     'sr_score': support_resistance_score,
                     'volume_score': volume_score,
                     'risk_level': self._assess_risk_level(
-                        technical_score, support_resistance_score, volume_score
+                        (
+                            technical_score_4h * 0.4
+                            + technical_score_1h * 0.4
+                            + technical_score_15m * 0.2
+                        ),
+                        support_resistance_score,
+                        volume_score,
                     ),
                     'reason': self._generate_signal_reason(
-                        indicators, key_levels, volume_data, signal_type
+                        indicators,
+                        key_levels,
+                        volume_data,
+                        signal_type,
+                        trend_alignment,
                     ),
                 }
             )
 
-            return signals
-
         except Exception as e:
             print(f'生成交易信号出错: {e}')
-            return []
+
+        return signals
+
+    def _check_trend_alignment(self, indicators: Dict) -> Dict:
+        """检查不同时间周期趋势是否一致"""
+        trends = {}
+        for timeframe in ['4h', '1h', '15m']:
+            if timeframe in indicators:
+                trends[timeframe] = indicators[timeframe]['trend']['direction']
+
+        # 检查趋势一致性
+        if len(trends) >= 2:
+            main_trend = trends.get('4h', trends.get('1h', None))
+            aligned = all(trend == main_trend for trend in trends.values())
+
+            if aligned:
+                status = f'趋势一致({main_trend})'
+            else:
+                status = '趋势分歧'
+
+            return {'aligned': aligned, 'status': status, 'trends': trends}
+
+        return {'aligned': False, 'status': '数据不足', 'trends': trends}
 
     def _assess_risk_level(
         self, technical_score: float, sr_score: float, volume_score: float
@@ -333,27 +468,24 @@ class TechnicalAnalyzer:
         key_levels: Dict,
         volume_data: Dict,
         signal_type: str,
+        trend_alignment: Dict,
     ) -> str:
-        """Generates detailed reason for the signal"""
+        """Generate detailed signal reason with multi-timeframe analysis"""
         reasons = []
 
-        # Technical indicators
-        if 'rsi' in indicators:
-            rsi = indicators['rsi']
-            if rsi < 30 and signal_type.endswith('buy'):
-                reasons.append(f'RSI超卖({rsi:.1f})')
-            elif rsi > 70 and signal_type.endswith('sell'):
-                reasons.append(f'RSI超买({rsi:.1f})')
+        # 添加趋势一致性信息
+        if trend_alignment['aligned']:
+            reasons.append(f"多周期{trend_alignment['status']}")
 
-        # MACD
-        if 'macd' in indicators:
-            macd = indicators['macd']
-            if macd['hist'] > 0 and signal_type.endswith('buy'):
-                reasons.append('MACD金叉')
-            elif macd['hist'] < 0 and signal_type.endswith('sell'):
-                reasons.append('MACD死叉')
+        # 各个时间周期的信号
+        for timeframe in ['4h', '1h', '15m']:
+            if timeframe in indicators:
+                timeframe_reasons = self._get_timeframe_reasons(
+                    indicators[timeframe], signal_type, timeframe
+                )
+                reasons.extend(timeframe_reasons)
 
-        # Volume
+        # 成交量分析
         volume_ratio = volume_data.get('ratio', 1)
         if volume_ratio > 1.5 and signal_type.endswith('buy'):
             reasons.append(f'成交量放大{volume_ratio:.1f}倍')
@@ -361,3 +493,35 @@ class TechnicalAnalyzer:
             reasons.append(f'成交量萎缩{1/volume_ratio:.1f}倍')
 
         return '，'.join(reasons) if reasons else '技术面综合信号'
+
+    def _get_timeframe_reasons(
+        self, timeframe_data: Dict, signal_type: str, timeframe: str
+    ) -> List[str]:
+        """Get reasons for a specific timeframe"""
+        reasons = []
+
+        # RSI
+        if 'rsi' in timeframe_data:
+            rsi = timeframe_data['rsi']
+            if rsi < 30 and signal_type.endswith('buy'):
+                reasons.append(f'{timeframe} RSI超卖({rsi:.1f})')
+            elif rsi > 70 and signal_type.endswith('sell'):
+                reasons.append(f'{timeframe} RSI超买({rsi:.1f})')
+
+        # MACD
+        if 'macd' in timeframe_data:
+            macd = timeframe_data['macd']
+            if macd['hist'] > 0 and signal_type.endswith('buy'):
+                reasons.append(f'{timeframe} MACD金叉')
+            elif macd['hist'] < 0 and signal_type.endswith('sell'):
+                reasons.append(f'{timeframe} MACD死叉')
+
+        # KDJ
+        if 'kdj' in timeframe_data:
+            kdj = timeframe_data['kdj']
+            if kdj['j'] < 20 and signal_type.endswith('buy'):
+                reasons.append(f'{timeframe} KDJ超卖')
+            elif kdj['j'] > 80 and signal_type.endswith('sell'):
+                reasons.append(f'{timeframe} KDJ超买')
+
+        return reasons

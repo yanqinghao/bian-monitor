@@ -164,21 +164,143 @@ class MarketMonitor:
     def _monitor_abnormal_movements(
         self, symbol: str, indicators: Dict, volume_data: Dict
     ):
-        """监控异常波动"""
+        """监控多时间周期的异常波动并发送Telegram通知"""
         try:
-            # 检查价格波动
-            if 'volatility' in indicators:
-                volatility = indicators['volatility']
-                if volatility['atr_percent'] > 5:  # 5%以上的波动
-                    print(
-                        f"\n⚠️ {symbol} 价格波动异常: {volatility['atr_percent']:.2f}%"
-                    )
+            messages = []
+            timeframes = {'1h': '1小时', '15m': '15分钟'}
 
-            # 检查成交量异常
-            if volume_data.get('ratio', 1) > 10:  # 10倍以上放量
-                print(
-                    f"\n⚠️ {symbol} 成交量异常: 当前量是均量的 {volume_data['ratio']:.2f} 倍"
+            # 检查各个时间周期的价格波动
+            for tf in timeframes:
+                if tf in indicators and 'volatility' in indicators[tf]:
+                    volatility = indicators[tf].get('volatility', {})
+                    atr_percent = volatility.get('atr_percent', 0)
+
+                    # 不同时间周期使用不同的阈值
+                    atr_threshold = 5 if tf == '1h' else 3  # 15分钟用较小阈值
+
+                    if atr_percent > atr_threshold:
+                        price_alert = (
+                            f'⚠️ {timeframes[tf]}价格波动提醒 ⚠️\n\n'
+                            f'🎯 交易对: <b>{symbol.upper()}</b>\n'
+                            f'📊 ATR波幅: <code>{atr_percent:.2f}%</code>\n'
+                            f"⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f'\n📈 波动详情:\n'
+                        )
+
+                        # 添加肯特纳通道信息
+                        if 'keltner' in volatility:
+                            keltner = volatility['keltner']
+                            price_alert += (
+                                f'• 肯特纳通道:\n'
+                                f"  上轨: <code>{keltner.get('upper', 0):.2f}</code>\n"
+                                f"  中轨: <code>{keltner.get('middle', 0):.2f}</code>\n"
+                                f"  下轨: <code>{keltner.get('lower', 0):.2f}</code>\n"
+                            )
+
+                        # 添加价格波动统计
+                        if 'price_volatility' in volatility:
+                            price_vol = volatility['price_volatility']
+                            price_alert += (
+                                f"• 价格区间: <code>{price_vol.get('price_range', 0):.2f}</code>\n"
+                                f"• 高低比: <code>{price_vol.get('high_low_ratio', 0):.2f}</code>\n"
+                            )
+
+                        # 添加趋势信息
+                        if 'trend' in indicators[tf]:
+                            trend = indicators[tf]['trend']
+                            trend_str = (
+                                '上涨'
+                                if trend.get('direction') == 'up'
+                                else '下跌'
+                            )
+                            trend_strength = trend.get('strength', 0)
+                            price_alert += (
+                                f'\n📊 趋势分析:\n'
+                                f'• 方向: {trend_str}\n'
+                                f'• 强度: <code>{trend_strength:.1f}</code>\n'
+                            )
+
+                        messages.append(price_alert)
+                        print(
+                            f'\n⚠️ {symbol} {timeframes[tf]}价格波动异常: {atr_percent:.2f}%'
+                        )
+
+            # 检查成交量异常 - 分时间周期
+            for tf in timeframes:
+                if tf in volume_data:
+                    volume_ratio = volume_data[tf].get('ratio', 1)
+                    pressure_ratio = volume_data[tf].get('pressure_ratio', 1)
+
+                    # 不同时间周期使用不同的阈值
+                    volume_threshold = 10 if tf == '1h' else 5  # 15分钟用较小阈值
+
+                    if volume_ratio > volume_threshold:
+                        volume_alert = (
+                            f'⚠️ {timeframes[tf]}成交量异常提醒 ⚠️\n\n'
+                            f'🎯 交易对: <b>{symbol.upper()}</b>\n'
+                            f'📊 成交量比率: <code>{volume_ratio:.2f}倍</code>\n'
+                            f'⚖️ 买卖比: <code>{pressure_ratio:.2f}</code>\n'
+                            f"⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f'\n📈 成交量分析:\n'
+                        )
+
+                        # 添加成交量详情
+                        tf_volume_data = volume_data[tf]
+                        if (
+                            'current_volume' in tf_volume_data
+                            and 'avg_volume' in tf_volume_data
+                        ):
+                            volume_alert += (
+                                f"• 当前成交量: <code>{tf_volume_data['current_volume']:.2f}</code>\n"
+                                f"• 平均成交量: <code>{tf_volume_data['avg_volume']:.2f}</code>\n"
+                            )
+
+                        # 分析买卖压力
+                        pressure_status = (
+                            '买方强势'
+                            if pressure_ratio > 1.5
+                            else '卖方强势'
+                            if pressure_ratio < 0.7
+                            else '买卖平衡'
+                        )
+                        volume_alert += f'• 市场状态: {pressure_status}\n'
+
+                        # 添加成交量趋势分析
+                        if 'volume_trend' in tf_volume_data:
+                            v_trend = tf_volume_data['volume_trend']
+                            volume_alert += (
+                                f'\n📊 成交量趋势:\n'
+                                f"• 连续放量: <code>{v_trend.get('consecutive_increase', 0)}</code>次\n"
+                                f"• 累计涨幅: <code>{v_trend.get('total_increase', 0):.2f}%</code>\n"
+                            )
+
+                        messages.append(volume_alert)
+                        print(
+                            f'\n⚠️ {symbol} {timeframes[tf]}成交量异常: '
+                            f'当前量是均量的 {volume_ratio:.2f} 倍'
+                        )
+
+            # 判断多时间周期的综合异常
+            if len(messages) >= 2:  # 如果多个时间周期都出现异常
+                combined_alert = (
+                    f'🚨 多时间周期异常警报 🚨\n\n'
+                    f'🎯 交易对: <b>{symbol.upper()}</b>\n'
+                    f'⚠️ 警告: 多个时间周期同时出现异常波动，风险较大！\n'
+                    f"⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                 )
+                messages.insert(0, combined_alert)  # 将综合警报放在最前面
+
+            # 发送Telegram通知
+            if messages and self.telegram:
+                # 添加风险提示
+                # risk_warning = (
+                #     "\n⚠️ 风险提示:\n"
+                #     "• 异常波动可能带来剧烈价格变动\n"
+                #     "• 建议适当调整仓位和止损\n"
+                #     "• 请勿盲目追涨杀跌\n"
+                #     "• 确保资金安全和风险控制"
+                # )
+                self.telegram.rev_alert_message(messages)
 
         except Exception as e:
             print(f'监控异常波动时出错: {e}')
@@ -287,11 +409,11 @@ class MarketMonitor:
         current_price: float,
         volume_data: Dict,
     ):
-        """Console only output signals"""
+        """改进的信号输出，包含多时间周期信息"""
         if not signals:
             return
 
-        # Check cooldown
+        # 检查冷却时间
         if symbol in self.last_alert_time:
             cooldown = (
                 180
@@ -333,7 +455,22 @@ class MarketMonitor:
 
             print(f"\n信号类型: {signal_type_map.get(signal['type'], '🔍 观察')}")
             print(f"信号强度: {signal['score']:.1f}/100")
-            print(f"技术得分: {signal.get('technical_score', 0):.1f}")
+
+            # 输出各时间周期的技术得分
+            technical_scores = signal.get('technical_score', {})
+            if technical_scores:
+                print('\n技术得分:')
+                if '4h' in technical_scores:
+                    print(f"- 4小时: {technical_scores['4h']:.1f}")
+                if '1h' in technical_scores:
+                    print(f"- 1小时: {technical_scores['1h']:.1f}")
+                if '15m' in technical_scores:
+                    print(f"- 15分钟: {technical_scores['15m']:.1f}")
+
+            # 输出趋势一致性信息
+            if 'trend_alignment' in signal:
+                print(f"趋势一致性: {signal['trend_alignment']}")
+
             print(f"支阻得分: {signal.get('sr_score', 0):.1f}")
             print(f"成交量得分: {signal.get('volume_score', 0):.1f}")
 
@@ -352,39 +489,6 @@ class MarketMonitor:
 
         self.last_alert_time[symbol] = current_time
         print(f'{"="*50}\n')
-
-    def _send_telegram_alerts(
-        self,
-        symbol: str,
-        signals: List[Dict],
-        current_price: float,
-        volume_data: Dict,
-    ):
-        """改进Telegram通知"""
-        for signal in signals:
-            if signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']:
-                # 构建更详细的消息
-                risk_emoji = {'high': '⚠️', 'medium': '⚡️', 'low': '✅'}
-
-                # 添加动量和趋势信息
-                momentum = (
-                    '强'
-                    if signal['technical_score'] > 70
-                    else ('中等' if signal['technical_score'] > 50 else '弱')
-                )
-
-                message = self.telegram.format_signal_message(
-                    symbol=symbol,
-                    signal_type=signal['type'],
-                    current_price=current_price,
-                    signal_score=signal['score'],
-                    technical_score=signal.get('technical_score', 0),
-                    volume_data=volume_data,
-                    risk_level=f"{risk_emoji.get(signal.get('risk_level', 'high'), '⚠️')} {signal.get('risk_level', 'high')}",
-                    momentum=momentum,
-                    reason=signal.get('reason', ''),
-                )
-                self.telegram.send_message(message)
 
     def _handle_kline_data(self, data):
         """Handle incoming kline data"""
@@ -413,6 +517,9 @@ class MarketMonitor:
 
         except Exception as e:
             print(f'处理K线数据失败: {e}')
+            import traceback
+
+            print(traceback.format_exc())
 
     def _handle_depth_data(self, data, stream):
         """Handle incoming depth data"""
@@ -432,6 +539,9 @@ class MarketMonitor:
 
         except Exception as e:
             print(f'处理深度数据失败: {e}')
+            import traceback
+
+            print(traceback.format_exc())
 
     def _process_messages(self):
         """Process WebSocket messages"""
@@ -487,7 +597,7 @@ class MarketMonitor:
                 time.sleep(60)  # 出错后等待1分钟再试
 
     def _analysis_loop(self):
-        """Main analysis loop with batch signals"""
+        """改进后的分析循环，支持多时间周期"""
         while self.running.is_set():
             try:
                 current_time = datetime.now()
@@ -497,31 +607,62 @@ class MarketMonitor:
                     with self.data_lock:
                         if symbol in self.latest_data:
                             current_price = self.latest_data[symbol]['price']
-                            kline_data = []
-                            klines = DataFetcher.get_kline_data(
+
+                            # 获取各个时间周期的K线数据
+                            kline_data_4h = []
+                            kline_data_1h = []
+                            kline_data_15m = []
+
+                            # 获取4小时数据
+                            klines_4h = DataFetcher.get_kline_data(
+                                symbol.upper(), '4h', 15
+                            )
+                            for _, row in klines_4h.iterrows():
+                                kline_data_4h.append(
+                                    self._format_kline_data(row)
+                                )
+
+                            # 获取1小时数据
+                            klines_1h = DataFetcher.get_kline_data(
                                 symbol.upper(), '1h', 15
                             )
-                            for _, row in klines.iterrows():
-                                kline_data.append(
-                                    {
-                                        'open_time': row['Close time'],
-                                        'open': float(row['Open']),
-                                        'high': float(row['High']),
-                                        'low': float(row['Low']),
-                                        'close': float(row['Close']),
-                                        'volume': float(row['Volume']),
-                                    }
+                            for _, row in klines_1h.iterrows():
+                                kline_data_1h.append(
+                                    self._format_kline_data(row)
                                 )
+
+                            # 获取15分钟数据
+                            klines_15m = DataFetcher.get_kline_data(
+                                symbol.upper(), '15m', 15
+                            )
+                            for _, row in klines_15m.iterrows():
+                                kline_data_15m.append(
+                                    self._format_kline_data(row)
+                                )
+
+                            # 准备成交量数据
                             volume_data = self._prepare_volume_data(symbol)
 
-                            if not kline_data or not volume_data:
+                            if not all(
+                                [
+                                    kline_data_4h,
+                                    kline_data_1h,
+                                    kline_data_15m,
+                                    volume_data,
+                                ]
+                            ):
                                 continue
 
+                            # 计算指标
                             indicators = (
                                 self.technical_analyzer.calculate_indicators(
-                                    kline_data
+                                    kline_data_4h,
+                                    kline_data_1h,
+                                    kline_data_15m,
                                 )
                             )
+
+                            # 生成信号
                             signals = self.technical_analyzer.generate_trading_signals(
                                 indicators=indicators,
                                 price=current_price,
@@ -529,6 +670,7 @@ class MarketMonitor:
                                 volume_data=volume_data,
                             )
 
+                            # 处理信号
                             for signal in signals:
                                 if signal['type'] in [
                                     'buy',
@@ -542,8 +684,11 @@ class MarketMonitor:
                                             'price': current_price,
                                             'signal_type': signal['type'],
                                             'score': signal['score'],
-                                            'technical_score': signal.get(
-                                                'technical_score', 0
+                                            'technical_score': signal[
+                                                'technical_score'
+                                            ],
+                                            'trend_alignment': signal.get(
+                                                'trend_alignment', '未知'
                                             ),
                                             'volume_data': volume_data,
                                             'risk_level': signal.get(
@@ -553,7 +698,7 @@ class MarketMonitor:
                                         }
                                     )
 
-                            # Console output as before
+                            # Console输出
                             if signals:
                                 self._output_signals(
                                     symbol,
@@ -563,20 +708,75 @@ class MarketMonitor:
                                     volume_data,
                                 )
 
-                            # Monitor movements
+                            # 监控异常波动
                             self._monitor_abnormal_movements(
                                 symbol, indicators, volume_data
                             )
 
-                # Send batch signals if any
-                if batch_signals and self.telegram:
-                    self.telegram.send_batch_signals(batch_signals)
+                if self.telegram:
+                    self.telegram.send_alert_message()
 
-                time.sleep(300)
+                # 发送批量信号
+                if batch_signals and self.telegram:
+                    self._send_batch_telegram_alerts(batch_signals)
+
+                time.sleep(300)  # 5分钟检查一次
 
             except Exception as e:
                 print(f'分析过程出错: {e}')
                 time.sleep(0.1)
+
+    def _send_batch_telegram_alerts(self, batch_signals: List[Dict]):
+        """发送批量Telegram通知，支持多时间周期信息"""
+        if not self.telegram:
+            return
+
+        for signal in batch_signals:
+            if signal['signal_type'] in [
+                'buy',
+                'sell',
+                'strong_buy',
+                'strong_sell',
+            ]:
+                # 构建更详细的消息
+                technical_scores = signal.get('technical_score', {})
+                scores_text = []
+                if technical_scores:
+                    if '4h' in technical_scores:
+                        scores_text.append(f"4h:{technical_scores['4h']:.1f}")
+                    if '1h' in technical_scores:
+                        scores_text.append(f"1h:{technical_scores['1h']:.1f}")
+                    if '15m' in technical_scores:
+                        scores_text.append(
+                            f"15m:{technical_scores['15m']:.1f}"
+                        )
+
+                trend_alignment = signal.get('trend_alignment', '')
+
+                message = self.telegram.format_signal_message(
+                    symbol=signal['symbol'],
+                    signal_type=signal['signal_type'],
+                    current_price=signal['price'],
+                    signal_score=signal['score'],
+                    technical_scores=', '.join(scores_text),
+                    trend_alignment=trend_alignment,
+                    volume_data=signal['volume_data'],
+                    risk_level=signal['risk_level'],
+                    reason=signal['reason'],
+                )
+
+                self.telegram.send_message(message)
+
+    def _format_kline_data(self, row) -> Dict:
+        """格式化K线数据"""
+        return {
+            'open_time': row['Close time'],
+            'open': float(row['Open']),
+            'high': float(row['High']),
+            'low': float(row['Low']),
+            'close': float(row['Close']),
+            'volume': float(row['Volume']),
+        }
 
     def start_monitoring(self):
         """启动市场监控"""
