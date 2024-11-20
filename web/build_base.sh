@@ -1,0 +1,1 @@
+docker build -t crypto-monitor:base -f ./Dockerfile.base .
