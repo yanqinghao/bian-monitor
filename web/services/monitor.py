@@ -161,46 +161,6 @@ class MarketMonitor:
 
         self.symbols = [x for x in self.symbols if x not in symbols_to_remove]
 
-    def _analyze_symbol(self, symbol: str, current_time: datetime):
-        """改进单个交易对分析"""
-        try:
-            current_price = self.latest_data[symbol]['price']
-
-            # 准备数据
-            kline_data = list(self.kline_buffers[symbol])
-            volume_data = self._prepare_volume_data(symbol)
-
-            if not kline_data or not volume_data:
-                return
-
-            # 计算技术指标
-            indicators = self.technical_analyzer.calculate_indicators(
-                kline_data
-            )
-
-            # 生成交易信号
-            signals = self.technical_analyzer.generate_trading_signals(
-                indicators=indicators,
-                price=current_price,
-                key_levels=self.key_levels.get(symbol, {}),
-                volume_data=volume_data,
-            )
-
-            # 输出信号
-            if signals:
-                self._output_signals(
-                    symbol, signals, current_time, current_price, volume_data
-                )
-
-            # 记录异常波动
-            self._monitor_abnormal_movements(symbol, indicators, volume_data)
-
-        except Exception as e:
-            print(f'分析{symbol}时出错: {e}')
-            import traceback
-
-            print(traceback.format_exc())
-
     def _monitor_abnormal_movements(
         self, symbol: str, indicators: Dict, volume_data: Dict
     ):
@@ -319,26 +279,46 @@ class MarketMonitor:
             print(f'准备成交量数据时出错: {e}')
             return {}
 
-    def _output_signals(self, symbol: str, signals: List[Dict], current_time: datetime,
-                   current_price: float, volume_data: Dict):
+    def _output_signals(
+        self,
+        symbol: str,
+        signals: List[Dict],
+        current_time: datetime,
+        current_price: float,
+        volume_data: Dict,
+    ):
         """Console only output signals"""
         if not signals:
             return
 
         # Check cooldown
         if symbol in self.last_alert_time:
-            cooldown = 180 if any(s['type'] in ['strong_buy', 'strong_sell'] for s in signals) else 300
-            if (current_time - self.last_alert_time[symbol]).total_seconds() < cooldown:
+            cooldown = (
+                180
+                if any(
+                    s['type'] in ['strong_buy', 'strong_sell'] for s in signals
+                )
+                else 300
+            )
+            if (
+                current_time - self.last_alert_time[symbol]
+            ).total_seconds() < cooldown:
                 return
 
         print(f'\n{"="*50}')
-        print(f'交易对: {symbol.upper()} - 时间: {current_time.strftime("%Y-%m-%d %H:%M:%S")}')
+        print(
+            f'交易对: {symbol.upper()} - 时间: {current_time.strftime("%Y-%m-%d %H:%M:%S")}'
+        )
         print(f'当前价格: {current_price:.8f}')
 
         if volume_data:
             volume_color = '🔴' if volume_data.get('ratio', 1) > 2 else '⚪️'
-            pressure_color = '🔴' if volume_data.get('pressure_ratio', 1) > 1.5 else (
-                '🔵' if volume_data.get('pressure_ratio', 1) < 0.7 else '⚪️'
+            pressure_color = (
+                '🔴'
+                if volume_data.get('pressure_ratio', 1) > 1.5
+                else (
+                    '🔵' if volume_data.get('pressure_ratio', 1) < 0.7 else '⚪️'
+                )
             )
             print(f'成交量比率: {volume_color} {volume_data["ratio"]:.2f}')
             print(f'买卖比: {pressure_color} {volume_data["pressure_ratio"]:.2f}')
@@ -348,23 +328,25 @@ class MarketMonitor:
                 'strong_buy': '🔥🔥🔥 强力买入',
                 'buy': '📈 买入',
                 'sell': '📉 卖出',
-                'strong_sell': '❄️❄️❄️ 强力卖出'
+                'strong_sell': '❄️❄️❄️ 强力卖出',
             }
-            
+
             print(f"\n信号类型: {signal_type_map.get(signal['type'], '🔍 观察')}")
             print(f"信号强度: {signal['score']:.1f}/100")
             print(f"技术得分: {signal.get('technical_score', 0):.1f}")
             print(f"支阻得分: {signal.get('sr_score', 0):.1f}")
             print(f"成交量得分: {signal.get('volume_score', 0):.1f}")
-            
+
             if 'risk_level' in signal:
                 risk_level_map = {
                     'high': '⚠️ 高风险',
                     'medium': '⚡️ 中等风险',
-                    'low': '✅ 低风险'
+                    'low': '✅ 低风险',
                 }
-                print(f"风险等级: {risk_level_map.get(signal['risk_level'], '未知风险')}")
-            
+                print(
+                    f"风险等级: {risk_level_map.get(signal['risk_level'], '未知风险')}"
+                )
+
             if 'reason' in signal:
                 print(f"触发原因: {signal['reason']}")
 
@@ -510,49 +492,86 @@ class MarketMonitor:
             try:
                 current_time = datetime.now()
                 batch_signals = []
-                
+
                 for symbol in self.symbols:
                     with self.data_lock:
                         if symbol in self.latest_data:
                             current_price = self.latest_data[symbol]['price']
-                            kline_data = list(self.kline_buffers[symbol])
+                            kline_data = []
+                            klines = DataFetcher.get_kline_data(
+                                symbol.upper(), '1h', 15
+                            )
+                            for _, row in klines.iterrows():
+                                kline_data.append(
+                                    {
+                                        'open_time': row['Close time'],
+                                        'open': float(row['Open']),
+                                        'high': float(row['High']),
+                                        'low': float(row['Low']),
+                                        'close': float(row['Close']),
+                                        'volume': float(row['Volume']),
+                                    }
+                                )
                             volume_data = self._prepare_volume_data(symbol)
-                            
+
                             if not kline_data or not volume_data:
                                 continue
 
-                            indicators = self.technical_analyzer.calculate_indicators(kline_data)
+                            indicators = (
+                                self.technical_analyzer.calculate_indicators(
+                                    kline_data
+                                )
+                            )
                             signals = self.technical_analyzer.generate_trading_signals(
                                 indicators=indicators,
                                 price=current_price,
                                 key_levels=self.key_levels.get(symbol, {}),
-                                volume_data=volume_data
+                                volume_data=volume_data,
                             )
-                            
+
                             for signal in signals:
-                                if signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']:
-                                    batch_signals.append({
-                                        'symbol': symbol,
-                                        'price': current_price,
-                                        'signal_type': signal['type'],
-                                        'score': signal['score'],
-                                        'technical_score': signal.get('technical_score', 0),
-                                        'volume_data': volume_data,
-                                        'risk_level': signal.get('risk_level', 'medium'),
-                                        'reason': signal.get('reason', '')
-                                    })
-                                    
+                                if signal['type'] in [
+                                    'buy',
+                                    'sell',
+                                    'strong_buy',
+                                    'strong_sell',
+                                ]:
+                                    batch_signals.append(
+                                        {
+                                            'symbol': symbol,
+                                            'price': current_price,
+                                            'signal_type': signal['type'],
+                                            'score': signal['score'],
+                                            'technical_score': signal.get(
+                                                'technical_score', 0
+                                            ),
+                                            'volume_data': volume_data,
+                                            'risk_level': signal.get(
+                                                'risk_level', 'medium'
+                                            ),
+                                            'reason': signal.get('reason', ''),
+                                        }
+                                    )
+
                             # Console output as before
                             if signals:
-                                self._output_signals(symbol, signals, current_time, current_price, volume_data)
-                            
+                                self._output_signals(
+                                    symbol,
+                                    signals,
+                                    current_time,
+                                    current_price,
+                                    volume_data,
+                                )
+
                             # Monitor movements
-                            self._monitor_abnormal_movements(symbol, indicators, volume_data)
-                
+                            self._monitor_abnormal_movements(
+                                symbol, indicators, volume_data
+                            )
+
                 # Send batch signals if any
                 if batch_signals and self.telegram:
                     self.telegram.send_batch_signals(batch_signals)
-                    
+
                 time.sleep(300)
 
             except Exception as e:
