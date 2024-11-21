@@ -93,16 +93,12 @@ class DataFetcher:
             tuple: (bids_df, asks_df) 买单和卖单的DataFrame
         """
         # 创建买单DataFrame
-        bids_df = pd.DataFrame(
-            data['bids'], columns=['price', 'quantity', 'ignore']
-        )
-        bids_df = bids_df.drop('ignore', axis=1)
+        bids_df = pd.DataFrame(data['bids'], columns=['price', 'quantity'])
+        # bids_df = bids_df.drop('ignore', axis=1)
 
         # 创建卖单DataFrame
-        asks_df = pd.DataFrame(
-            data['asks'], columns=['price', 'quantity', 'ignore']
-        )
-        asks_df = asks_df.drop('ignore', axis=1)
+        asks_df = pd.DataFrame(data['asks'], columns=['price', 'quantity'])
+        # asks_df = asks_df.drop('ignore', axis=1)
 
         # 转换数据类型
         for df in [bids_df, asks_df]:

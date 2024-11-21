@@ -248,7 +248,7 @@ class TechnicalAnalyzer:
         key_levels: Dict,
         volume_data: Dict,
     ) -> List[Dict]:
-        """Generate trading signals with multi-timeframe analysis"""
+        """生成交易信号，适配新的成交量数据结构"""
         signals = []
 
         try:
@@ -264,7 +264,7 @@ class TechnicalAnalyzer:
                 price, key_levels
             )
 
-            # 成交量分数
+            # 成交量分数，使用改进后的评估方法
             volume_score = self._evaluate_volume_quality(volume_data)
 
             # 趋势一致性检查
@@ -281,9 +281,11 @@ class TechnicalAnalyzer:
 
             # 加入趋势一致性奖励/惩罚
             if trend_alignment['aligned']:
-                total_score *= 1.1  # 趋势一致性奖励
+                total_score *= 1.1
             else:
-                total_score *= 0.9  # 趋势不一致惩罚
+                total_score *= 0.9
+
+            signal_type = ''
             # 信号判断 (同时考虑趋势一致性)
             if (
                 total_score >= 80
@@ -315,6 +317,13 @@ class TechnicalAnalyzer:
                 signal_type = 'sell'
             else:
                 return []
+
+            # 买卖压力调整
+            pressure_ratio = volume_data.get('pressure_ratio', 1)
+            if signal_type.endswith('buy') and pressure_ratio < 0.7:
+                total_score *= 0.9  # 买入信号但卖压强，降低分数
+            elif signal_type.endswith('sell') and pressure_ratio > 1.5:
+                total_score *= 0.9  # 卖出信号但买压强，降低分数
 
             signals.append(
                 {
@@ -425,16 +434,21 @@ class TechnicalAnalyzer:
         return max(0, min(100, score))
 
     def _evaluate_volume_quality(self, volume_data: Dict) -> float:
-        """改进成交量质量评估"""
+        """改进成交量质量评估，适配深度数据"""
         score = 50
 
         try:
+            # 获取5分钟周期的基础数据
             volume_ratio = volume_data.get('ratio', 1)
             pressure_ratio = volume_data.get('pressure_ratio', 1)
 
+            # # 分析买卖压力
+            # bid_volume = volume_data.get('bid_volume', 0)
+            # ask_volume = volume_data.get('ask_volume', 0)
+
             # 成交量比率分析
             if volume_ratio > 5:  # 过度放量
-                score += 15  # 降低极端放量的得分
+                score += 15
             elif volume_ratio > 2:
                 score += 25
             elif volume_ratio > 1.5:
@@ -445,16 +459,26 @@ class TechnicalAnalyzer:
                 score -= 15
 
             # 买卖压力分析
-            if pressure_ratio > 3:  # 过度买压
-                score += 15  # 降低极端买压的得分
+            if pressure_ratio > 3:  # 强烈买压
+                score += 15
             elif pressure_ratio > 1.5:
                 score += 25
             elif pressure_ratio > 1.2:
                 score += 15
-            elif pressure_ratio < 0.5:
+            elif pressure_ratio < 0.5:  # 强烈卖压
                 score -= 25
             elif pressure_ratio < 0.8:
                 score -= 15
+
+            # 考虑成交量趋势
+            volume_trend = volume_data.get('volume_trend', {})
+            consecutive_increase = volume_trend.get('consecutive_increase', 0)
+            total_increase = volume_trend.get('total_increase', 0)
+
+            if consecutive_increase >= 3 and total_increase > 20:
+                score += 10
+            elif consecutive_increase >= 2 and total_increase > 10:
+                score += 5
 
             return max(0, min(100, score))
 
@@ -470,7 +494,7 @@ class TechnicalAnalyzer:
         signal_type: str,
         trend_alignment: Dict,
     ) -> str:
-        """Generate detailed signal reason with multi-timeframe analysis"""
+        """生成详细信号原因，适配新的成交量数据结构"""
         reasons = []
 
         # 添加趋势一致性信息
@@ -487,10 +511,23 @@ class TechnicalAnalyzer:
 
         # 成交量分析
         volume_ratio = volume_data.get('ratio', 1)
+        pressure_ratio = volume_data.get('pressure_ratio', 1)
+        volume_trend = volume_data.get('volume_trend', {})
+
+        # 成交量异常
         if volume_ratio > 1.5 and signal_type.endswith('buy'):
             reasons.append(f'成交量放大{volume_ratio:.1f}倍')
+            if pressure_ratio > 1.5:
+                reasons.append('买方压力强势')
         elif volume_ratio < 0.7 and signal_type.endswith('sell'):
             reasons.append(f'成交量萎缩{1/volume_ratio:.1f}倍')
+            if pressure_ratio < 0.7:
+                reasons.append('卖方压力强势')
+
+        # 成交量趋势
+        consecutive_increase = volume_trend.get('consecutive_increase', 0)
+        if consecutive_increase >= 3:
+            reasons.append(f'连续{consecutive_increase}次放量')
 
         return '，'.join(reasons) if reasons else '技术面综合信号'
 

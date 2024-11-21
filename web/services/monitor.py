@@ -1,6 +1,4 @@
 import numpy as np
-import websocket
-import json
 import threading
 import time
 import os
@@ -24,7 +22,6 @@ class MarketMonitor:
     def __init__(self, symbols: List[str] = [], use_proxy: bool = False):
         # Base configuration
         self.base_url = 'https://api.binance.com/api/v3'
-        self.ws_url = 'wss://stream.binance.com:443/stream?streams='
         self.proxies = (
             {'http': 'http://127.0.0.1:1088', 'https': 'http://127.0.0.1:1088'}
             if use_proxy
@@ -53,7 +50,6 @@ class MarketMonitor:
         # Thread management
         self.message_queue = queue.Queue()
         self.running = threading.Event()
-        self.ws = None
         self.data_lock = threading.Lock()
 
         # Initialize Telegram notifier
@@ -305,95 +301,106 @@ class MarketMonitor:
         except Exception as e:
             print(f'监控异常波动时出错: {e}')
 
-    def _start_websocket(self):
-        """启动WebSocket连接"""
-
-        def on_message(ws, message):
-            if self.running.is_set():
-                self.message_queue.put(message)
-
-        def on_error(ws, error):
-            print(f'WebSocket错误: {error}')
-            self._reconnect()
-
-        def on_close(ws, close_status_code, close_msg):
-            print(f'WebSocket连接关闭: {close_status_code} - {close_msg}')
-            self._reconnect()
-
-        def on_open(ws):
-            print('WebSocket连接已建立')
-
-        # 准备订阅的streams
-        streams = []
-        for symbol in self.symbols:
-            streams.extend(
-                [f'{symbol}@kline_5m', f'{symbol}@depth5@1000ms']  # 改为1秒更新一次
-            )
-
-        ws_url = f"{self.ws_url}{'/'.join(streams)}"
-
-        while self.running.is_set():
-            try:
-                self.ws = websocket.WebSocketApp(
-                    ws_url,
-                    on_message=on_message,
-                    on_error=on_error,
-                    on_close=on_close,
-                    on_open=on_open,
-                )
-
-                self.ws.run_forever()
-            except Exception as e:
-                print(f'WebSocket连接异常: {e}')
-                time.sleep(5)  # 重连前等待
-
     def _prepare_volume_data(self, symbol: str) -> Dict:
-        """改进成交量数据处理"""
+        """
+        Improved volume data processing using direct market depth data
+        """
         try:
             volume_data = {}
-            if len(self.volume_buffers[symbol]) >= 5:
-                volume_list = list(self.volume_buffers[symbol])
 
-                # 计算近期成交量
-                recent_bid_volume = sum(
-                    v.get('bid_volume', 0) for v in volume_list[-5:]
-                )
-                recent_ask_volume = sum(
-                    v.get('ask_volume', 0) for v in volume_list[-5:]
-                )
+            # Get current market depth data
+            bids_df, asks_df = DataFetcher.get_depth_data(
+                symbol.upper(), limit=20
+            )
 
-                # 计算历史成交量（使用更长的历史数据）
-                historical_volumes = []
-                for v in volume_list[:-5]:
-                    total_volume = v.get('bid_volume', 0) + v.get(
-                        'ask_volume', 0
-                    )
-                    if total_volume > 0:
-                        historical_volumes.append(total_volume)
+            # Calculate current volumes
+            current_bid_volume = bids_df['quantity'].sum()
+            current_ask_volume = asks_df['quantity'].sum()
+            current_volume = current_bid_volume + current_ask_volume
 
-                current_volume = recent_bid_volume + recent_ask_volume
+            # Get historical kline data for volume comparison (last 20 periods)
+            historical_klines = DataFetcher.get_kline_data(
+                symbol.upper(), '5m', 1, limit=20
+            )
 
-                # 使用加权平均处理历史成交量
-                if historical_volumes:
-                    weights = np.linspace(0.5, 1.0, len(historical_volumes))
-                    avg_volume = np.average(
-                        historical_volumes, weights=weights
-                    )
-                else:
-                    avg_volume = current_volume
+            if not historical_klines.empty:
+                # Calculate weighted average volume from historical data
+                weights = np.linspace(0.5, 1.0, len(historical_klines))
+                historical_volumes = historical_klines['Volume'].values
+                avg_volume = np.average(historical_volumes, weights=weights)
 
                 volume_data = {
-                    'bid_volume': recent_bid_volume,
-                    'ask_volume': recent_ask_volume,
+                    'bid_volume': current_bid_volume,
+                    'ask_volume': current_ask_volume,
                     'current_volume': current_volume,
                     'avg_volume': avg_volume,
                     'ratio': current_volume / avg_volume
                     if avg_volume > 0
                     else 1.0,
-                    'pressure_ratio': recent_bid_volume / recent_ask_volume
-                    if recent_ask_volume > 0
+                    'pressure_ratio': current_bid_volume / current_ask_volume
+                    if current_ask_volume > 0
                     else 1.0,
                 }
+
+                # Calculate additional metrics for multiple timeframes
+                volume_data.update(
+                    {
+                        '15m': {
+                            'current_volume': current_volume,
+                            'avg_volume': avg_volume,
+                            'ratio': current_volume / avg_volume
+                            if avg_volume > 0
+                            else 1.0,
+                            'pressure_ratio': current_bid_volume
+                            / current_ask_volume
+                            if current_ask_volume > 0
+                            else 1.0,
+                        }
+                    }
+                )
+
+                # Get 1h historical data for hourly analysis
+                hourly_klines = DataFetcher.get_kline_data(
+                    symbol.upper(), '1h', 1, limit=20
+                )
+                if not hourly_klines.empty:
+                    hourly_avg_volume = np.average(
+                        hourly_klines['Volume'].values,
+                        weights=np.linspace(0.5, 1.0, len(hourly_klines)),
+                    )
+                    hourly_current = (
+                        current_volume * 12
+                    )  # Approximate hourly volume
+
+                    volume_data['1h'] = {
+                        'current_volume': hourly_current,
+                        'avg_volume': hourly_avg_volume,
+                        'ratio': hourly_current / hourly_avg_volume
+                        if hourly_avg_volume > 0
+                        else 1.0,
+                        'pressure_ratio': current_bid_volume
+                        / current_ask_volume
+                        if current_ask_volume > 0
+                        else 1.0,
+                    }
+
+                # Add volume trend analysis
+                volume_trend = {'consecutive_increase': 0, 'total_increase': 0}
+
+                # Calculate consecutive volume increases
+                volumes = historical_klines['Volume'].values
+                for i in range(len(volumes) - 1, 0, -1):
+                    if volumes[i] > volumes[i - 1]:
+                        volume_trend['consecutive_increase'] += 1
+                        volume_trend['total_increase'] += (
+                            (volumes[i] - volumes[i - 1])
+                            / volumes[i - 1]
+                            * 100
+                        )
+                    else:
+                        break
+
+                volume_data['volume_trend'] = volume_trend
 
             return volume_data
 
@@ -490,78 +497,6 @@ class MarketMonitor:
         self.last_alert_time[symbol] = current_time
         print(f'{"="*50}\n')
 
-    def _handle_kline_data(self, data):
-        """Handle incoming kline data"""
-        try:
-            symbol = data['s'].lower()
-            kline = data['k']
-
-            with self.data_lock:
-                self.kline_buffers[symbol].append(
-                    {
-                        'open_time': datetime.fromtimestamp(
-                            int(kline['t']) / 1000
-                        ),
-                        'open': float(kline['o']),
-                        'high': float(kline['h']),
-                        'low': float(kline['l']),
-                        'close': float(kline['c']),
-                        'volume': float(kline['v']),
-                    }
-                )
-
-                self.latest_data[symbol] = {
-                    'price': float(kline['c']),
-                    'volume': float(kline['v']),
-                }
-
-        except Exception as e:
-            print(f'处理K线数据失败: {e}')
-            import traceback
-
-            print(traceback.format_exc())
-
-    def _handle_depth_data(self, data, stream):
-        """Handle incoming depth data"""
-        try:
-            symbol = stream.split('@')[0]
-            bid_volume = sum(float(bid[1]) for bid in data['bids'][:5])
-            ask_volume = sum(float(ask[1]) for ask in data['asks'][:5])
-
-            with self.data_lock:
-                self.volume_buffers[symbol].append(
-                    {
-                        'time': datetime.now(),
-                        'bid_volume': bid_volume,
-                        'ask_volume': ask_volume,
-                    }
-                )
-
-        except Exception as e:
-            print(f'处理深度数据失败: {e}')
-            import traceback
-
-            print(traceback.format_exc())
-
-    def _process_messages(self):
-        """Process WebSocket messages"""
-        while self.running.is_set():
-            try:
-                message = self.message_queue.get(timeout=1)
-                data = json.loads(message)
-
-                if 'stream' in data:
-                    if 'kline' in data['stream']:
-                        self._handle_kline_data(data['data'])
-                    elif 'depth' in data['stream']:
-                        self._handle_depth_data(data['data'], data['stream'])
-
-            except queue.Empty:
-                continue
-            except Exception as e:
-                print(f'处理消息出错: {e}')
-                time.sleep(0.1)
-
     def _periodic_update_levels(self):
         """定期更新关键价位"""
         while self.running.is_set():
@@ -602,116 +537,104 @@ class MarketMonitor:
             try:
                 current_time = datetime.now()
                 batch_signals = []
-
                 for symbol in self.symbols:
-                    with self.data_lock:
-                        if symbol in self.latest_data:
-                            current_price = self.latest_data[symbol]['price']
 
-                            # 获取各个时间周期的K线数据
-                            kline_data_4h = []
-                            kline_data_1h = []
-                            kline_data_15m = []
+                    # 获取各个时间周期的K线数据
+                    kline_data_4h = []
+                    kline_data_1h = []
+                    kline_data_15m = []
 
-                            # 获取4小时数据
-                            klines_4h = DataFetcher.get_kline_data(
-                                symbol.upper(), '4h', 15
+                    # 获取4小时数据
+                    klines_4h = DataFetcher.get_kline_data(
+                        symbol.upper(), '4h', 15
+                    )
+                    for _, row in klines_4h.iterrows():
+                        kline_data_4h.append(self._format_kline_data(row))
+
+                    # 获取1小时数据
+                    klines_1h = DataFetcher.get_kline_data(
+                        symbol.upper(), '1h', 15
+                    )
+                    for _, row in klines_1h.iterrows():
+                        kline_data_1h.append(self._format_kline_data(row))
+
+                    current_price = float(klines_1h['Close'].iloc[-1])
+                    # 获取15分钟数据
+                    klines_15m = DataFetcher.get_kline_data(
+                        symbol.upper(), '15m', 15
+                    )
+                    for _, row in klines_15m.iterrows():
+                        kline_data_15m.append(self._format_kline_data(row))
+
+                    # 准备成交量数据
+                    volume_data = self._prepare_volume_data(symbol)
+
+                    if not all(
+                        [
+                            kline_data_4h,
+                            kline_data_1h,
+                            kline_data_15m,
+                            volume_data,
+                        ]
+                    ):
+                        continue
+
+                    # 计算指标
+                    indicators = self.technical_analyzer.calculate_indicators(
+                        kline_data_4h,
+                        kline_data_1h,
+                        kline_data_15m,
+                    )
+
+                    # 生成信号
+                    signals = self.technical_analyzer.generate_trading_signals(
+                        indicators=indicators,
+                        price=current_price,
+                        key_levels=self.key_levels.get(symbol, {}),
+                        volume_data=volume_data,
+                    )
+                    # 处理信号
+                    for signal in signals:
+                        if signal['type'] in [
+                            'buy',
+                            'sell',
+                            'strong_buy',
+                            'strong_sell',
+                        ]:
+                            batch_signals.append(
+                                {
+                                    'symbol': symbol,
+                                    'price': current_price,
+                                    'signal_type': signal['type'],
+                                    'score': signal['score'],
+                                    'technical_score': signal[
+                                        'technical_score'
+                                    ],
+                                    'trend_alignment': signal.get(
+                                        'trend_alignment', '未知'
+                                    ),
+                                    'volume_data': volume_data,
+                                    'risk_level': signal.get(
+                                        'risk_level', 'medium'
+                                    ),
+                                    'reason': signal.get('reason', ''),
+                                }
                             )
-                            for _, row in klines_4h.iterrows():
-                                kline_data_4h.append(
-                                    self._format_kline_data(row)
-                                )
 
-                            # 获取1小时数据
-                            klines_1h = DataFetcher.get_kline_data(
-                                symbol.upper(), '1h', 15
-                            )
-                            for _, row in klines_1h.iterrows():
-                                kline_data_1h.append(
-                                    self._format_kline_data(row)
-                                )
+                    # Console输出
+                    if signals:
+                        self._output_signals(
+                            symbol,
+                            signals,
+                            current_time,
+                            current_price,
+                            volume_data,
+                        )
 
-                            # 获取15分钟数据
-                            klines_15m = DataFetcher.get_kline_data(
-                                symbol.upper(), '15m', 15
-                            )
-                            for _, row in klines_15m.iterrows():
-                                kline_data_15m.append(
-                                    self._format_kline_data(row)
-                                )
-
-                            # 准备成交量数据
-                            volume_data = self._prepare_volume_data(symbol)
-
-                            if not all(
-                                [
-                                    kline_data_4h,
-                                    kline_data_1h,
-                                    kline_data_15m,
-                                    volume_data,
-                                ]
-                            ):
-                                continue
-
-                            # 计算指标
-                            indicators = (
-                                self.technical_analyzer.calculate_indicators(
-                                    kline_data_4h,
-                                    kline_data_1h,
-                                    kline_data_15m,
-                                )
-                            )
-
-                            # 生成信号
-                            signals = self.technical_analyzer.generate_trading_signals(
-                                indicators=indicators,
-                                price=current_price,
-                                key_levels=self.key_levels.get(symbol, {}),
-                                volume_data=volume_data,
-                            )
-
-                            # 处理信号
-                            for signal in signals:
-                                if signal['type'] in [
-                                    'buy',
-                                    'sell',
-                                    'strong_buy',
-                                    'strong_sell',
-                                ]:
-                                    batch_signals.append(
-                                        {
-                                            'symbol': symbol,
-                                            'price': current_price,
-                                            'signal_type': signal['type'],
-                                            'score': signal['score'],
-                                            'technical_score': signal[
-                                                'technical_score'
-                                            ],
-                                            'trend_alignment': signal.get(
-                                                'trend_alignment', '未知'
-                                            ),
-                                            'volume_data': volume_data,
-                                            'risk_level': signal.get(
-                                                'risk_level', 'medium'
-                                            ),
-                                            'reason': signal.get('reason', ''),
-                                        }
-                                    )
-
-                            # Console输出
-                            if signals:
-                                self._output_signals(
-                                    symbol,
-                                    signals,
-                                    current_time,
-                                    current_price,
-                                    volume_data,
-                                )
-
-                            # # 监控异常波动
-                            # self._monitor_abnormal_movements(
-                            #     symbol, indicators, volume_data
-                            # )
+                    # # 监控异常波动
+                    # self._monitor_abnormal_movements(
+                    #     symbol, indicators, volume_data
+                    # )
 
                 # if self.telegram:
                 #     self.telegram.send_alert_message()
@@ -787,8 +710,6 @@ class MarketMonitor:
 
         # 启动所有监控线程
         threads = [
-            ('WebSocket', self._start_websocket),
-            ('Message Processing', self._process_messages),
             ('Analysis', self._analysis_loop),
             ('Level Updates', self._periodic_update_levels),
         ]
@@ -805,13 +726,4 @@ class MarketMonitor:
         """Stop market monitoring"""
         print('正在停止监控...')
         self.running.clear()
-        if self.ws:
-            self.ws.close()
         print('监控已停止')
-
-    def _reconnect(self):
-        """重新连接WebSocket"""
-        if self.running.is_set():
-            print('正在尝试重新连接...')
-            time.sleep(5)  # 等待5秒后重连
-            threading.Thread(target=self._start_websocket).start()
