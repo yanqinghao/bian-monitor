@@ -660,6 +660,7 @@ class MarketMonitor:
                     last_analysis = self.last_major_analysis_time[symbol]
                     if (current_time - last_analysis).total_seconds() >= 3600:  # 一小时
                         analysis_message = self._analyze_major_coin(symbol)
+                        print(analysis_message)
                         if analysis_message and self.telegram:
                             self.telegram.send_message(analysis_message)
                         self.last_major_analysis_time[symbol] = current_time
