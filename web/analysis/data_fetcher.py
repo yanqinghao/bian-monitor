@@ -5,7 +5,7 @@ import pandas as pd
 
 class DataFetcher:
     @staticmethod
-    def get_kline_data(symbol, interval, days, limit=1000):
+    def get_kline_data(symbol, interval, days, limit=1000, proxies=None):
         """获取K线数据"""
         url = 'https://api.binance.com/api/v3/klines'
         end_time = int(datetime.now().timestamp() * 1000)
@@ -22,7 +22,7 @@ class DataFetcher:
         }
 
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, params=params, timeout=30, proxies=proxies)
             response.raise_for_status()
             return DataFetcher.process_kline_data(response.json())
         except Exception as e:
@@ -58,7 +58,7 @@ class DataFetcher:
         return df
 
     @staticmethod
-    def get_depth_data(symbol, limit=100):
+    def get_depth_data(symbol, limit=100, proxies=None):
         """
         获取市场深度信息
 
@@ -75,7 +75,7 @@ class DataFetcher:
         params = {'symbol': symbol, 'limit': limit}
 
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, params=params, timeout=30, proxies=proxies)
             response.raise_for_status()
             return DataFetcher.process_depth_data(response.json())
         except Exception as e:

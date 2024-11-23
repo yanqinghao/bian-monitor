@@ -27,11 +27,11 @@ class MarketScanner:
             for base in self.stablecoins
         ]
 
-    def get_top_symbols(self, top_n=10) -> dict:
+    def get_top_symbols(self, top_n=10, proxies=None) -> dict:
         """获取前top_n的交易对（按成交量、涨幅、跌幅），排除稳定币对"""
         try:
             print('正在获取24小时交易数据...')
-            response = requests.get(f'{self.base_url}/ticker/24hr')
+            response = requests.get(f'{self.base_url}/ticker/24hr', proxies=proxies)
             response.raise_for_status()
             data = response.json()
 

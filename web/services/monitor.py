@@ -1,10 +1,11 @@
 import numpy as np
+import pandas as pd
 import threading
 import time
 import os
 import queue
 from itertools import chain
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 from collections import deque
 from services.scan import MarketScanner
@@ -12,6 +13,7 @@ from analysis.data_fetcher import DataFetcher
 from analysis.crypto_analyzer import CryptoAnalyzer
 from analysis.technical_analyzer import TechnicalAnalyzer
 from services.notifier import TelegramNotifier
+from analysis.pattern_detection import EnhancedPatternDetection
 
 # from dotenv import load_dotenv
 
@@ -28,9 +30,10 @@ class MarketMonitor:
             else None
         )
 
-        # Symbol management
+        # 添加主要币种列表
+        self.major_coins = ['btcusdt', 'ethusdt', 'solusdt', 'dogeusdt', 'bnbusdt']
         self.user_define_symbols = [s.lower() for s in symbols]
-        self.symbols = self.user_define_symbols
+        self.symbols = list(set(self.major_coins + self.user_define_symbols))
 
         # Data buffers
         self.kline_buffers = {
@@ -42,9 +45,11 @@ class MarketMonitor:
         self.key_levels = {}
         self.latest_data = {}
         self.last_alert_time = {}
+        self.last_major_analysis_time = {coin: datetime.now()-timedelta(hours=1) for coin in self.major_coins}
 
         # Analysis components
         self.technical_analyzer = TechnicalAnalyzer()
+        self.pattern_detector = EnhancedPatternDetection()
         self.scanner = MarketScanner()
 
         # Thread management
@@ -73,7 +78,7 @@ class MarketMonitor:
         """Update monitored symbols list"""
         try:
             print('正在更新监控列表...')
-            top_symbols = self.scanner.get_top_symbols(top_n=20)
+            top_symbols = self.scanner.get_top_symbols(top_n=2, proxies=self.proxies)
 
             all_symbols = set()
             for category in ['volume', 'gainers', 'losers']:
@@ -120,7 +125,7 @@ class MarketMonitor:
             try:
                 with self.data_lock:
                     self.key_levels[symbol] = CryptoAnalyzer(
-                        symbol.upper()
+                        symbol.upper(), proxies=self.proxies
                     ).analyze_key_level()
                     if 0 in list(
                         chain.from_iterable(self.key_levels[symbol].values())
@@ -133,7 +138,7 @@ class MarketMonitor:
                         symbols_to_remove.append(symbol)
                     else:
                         klines = DataFetcher.get_kline_data(
-                            symbol.upper(), '1m', 1, limit=100
+                            symbol.upper(), '1m', 1, limit=100, proxies=self.proxies
                         )
                         for _, row in klines.iterrows():
                             self.kline_buffers[symbol].append(
@@ -157,6 +162,118 @@ class MarketMonitor:
 
         self.symbols = [x for x in self.symbols if x not in symbols_to_remove]
 
+    def _analyze_patterns(self, df: pd.DataFrame) -> Dict:
+        """分析所有K线形态"""
+        try:
+            # 获取所有K线形态
+            candlestick_patterns = self.pattern_detector.detect_candlestick_patterns(df)
+            
+            # 获取经典价格形态
+            price_patterns = self.pattern_detector.detect_price_patterns(df)
+            
+            # 获取支撑位和压力位
+            support_resistance = self.pattern_detector.detect_support_resistance(df)
+            
+            # 获取趋势线
+            trend_lines = self.pattern_detector.detect_trend_lines(df)
+            
+            # 分析趋势强度
+            trend_strength = self.pattern_detector.get_trend_strength(df)
+            
+            # 整合所有分析结果
+            return {
+                'candlestick_patterns': candlestick_patterns,
+                'price_patterns': price_patterns,
+                'support_resistance': support_resistance,
+                'trend_lines': trend_lines,
+                'trend_strength': trend_strength
+            }
+        except Exception as e:
+            print(f'形态分析失败: {e}')
+            return {}
+        
+    def _analyze_major_coin(self, symbol: str) -> str:
+        """分析主要币种的形态和策略"""
+        try:
+            # 获取不同时间周期的K线数据
+            klines_4h = DataFetcher.get_kline_data(symbol.upper(), '4h', 100, proxies=self.proxies)
+            klines_1h = DataFetcher.get_kline_data(symbol.upper(), '1h', 100, proxies=self.proxies)
+            
+            # 进行形态分析
+            patterns_4h = self._analyze_patterns(klines_4h)
+            patterns_1h = self._analyze_patterns(klines_1h)
+            
+            current_price = float(klines_1h['Close'].iloc[-1])
+            
+            # 生成分析报告
+            message = (
+                f"🔄 {symbol.upper()} 形态分析报告\n\n"
+                f"💰 当前价格: {current_price:.2f} USDT\n\n"
+            )
+            
+            # 添加4小时周期分析
+            message += "📊 4小时周期分析:\n"
+            if patterns_4h:
+                # 分析趋势强度
+                trend_str = "看涨" if patterns_4h['trend_strength'] > 0 else "看跌"
+                strength = abs(patterns_4h['trend_strength'])
+                message += f"• 趋势: {trend_str} (强度: {strength:.2f})\n"
+                
+                # 添加显著的K线形态
+                significant_patterns = []
+                for pattern_name, pattern_data in patterns_4h['candlestick_patterns'].items():
+                    if any(pattern_data['signal'] != 0):
+                        category = pattern_data['category']
+                        if category.reliability >= 4:  # 只显示可靠度高的形态
+                            significant_patterns.append(f"{category.name}({category.trend_type.value})")
+                
+                if significant_patterns:
+                    message += f"• 主要形态: {', '.join(significant_patterns)}\n"
+                
+                # 添加支撑压力位
+                sr_levels = patterns_4h['support_resistance']
+                if sr_levels:
+                    supports = sr_levels.get('support_levels', [])
+                    resistances = sr_levels.get('resistance_levels', [])
+                    if supports:
+                        message += f"• 近期支撑位: {supports[0]:.2f}\n"
+                    if resistances:
+                        message += f"• 近期压力位: {resistances[0]:.2f}\n"
+            
+            # 添加1小时周期分析
+            message += "\n⏰ 1小时周期分析:\n"
+            if patterns_1h:
+                trend_str = "看涨" if patterns_1h['trend_strength'] > 0 else "看跌"
+                strength = abs(patterns_1h['trend_strength'])
+                message += f"• 趋势: {trend_str} (强度: {strength:.2f})\n"
+                
+                # 分析短期形态
+                short_term_patterns = []
+                for pattern_name, pattern_data in patterns_1h['candlestick_patterns'].items():
+                    if any(pattern_data['signal'] != 0):
+                        category = pattern_data['category']
+                        if category.reliability >= 3:
+                            short_term_patterns.append(f"{category.name}({category.trend_type.value})")
+                
+                if short_term_patterns:
+                    message += f"• 当前形态: {', '.join(short_term_patterns)}\n"
+            
+            # 添加交易建议
+            message += "\n💡 交易建议:\n"
+            # 综合分析给出建议
+            if patterns_4h['trend_strength'] > 0.5 and patterns_1h['trend_strength'] > 0.3:
+                message += "• 建议做多，注意设置止损\n"
+            elif patterns_4h['trend_strength'] < -0.5 and patterns_1h['trend_strength'] < -0.3:
+                message += "• 建议做空，注意设置止损\n"
+            else:
+                message += "• 建议观望，等待更清晰的信号\n"
+            
+            return message
+            
+        except Exception as e:
+            print(f'分析主要币种失败 {symbol}: {e}')
+            return ""
+        
     def _monitor_abnormal_movements(
         self, symbol: str, indicators: Dict, volume_data: Dict
     ):
@@ -310,7 +427,7 @@ class MarketMonitor:
 
             # Get current market depth data
             bids_df, asks_df = DataFetcher.get_depth_data(
-                symbol.upper(), limit=20
+                symbol.upper(), limit=20, proxies=self.proxies
             )
 
             # Calculate current volumes
@@ -320,7 +437,7 @@ class MarketMonitor:
 
             # Get historical kline data for volume comparison (last 20 periods)
             historical_klines = DataFetcher.get_kline_data(
-                symbol.upper(), '5m', 1, limit=20
+                symbol.upper(), '5m', 1, limit=20, proxies=self.proxies
             )
 
             if not historical_klines.empty:
@@ -361,7 +478,7 @@ class MarketMonitor:
 
                 # Get 1h historical data for hourly analysis
                 hourly_klines = DataFetcher.get_kline_data(
-                    symbol.upper(), '1h', 1, limit=20
+                    symbol.upper(), '1h', 1, limit=20, proxies=self.proxies
                 )
                 if not hourly_klines.empty:
                     hourly_avg_volume = np.average(
@@ -508,7 +625,7 @@ class MarketMonitor:
                 for symbol in self.symbols:
                     with self.data_lock:
                         self.key_levels[symbol] = CryptoAnalyzer(
-                            symbol
+                            symbol, proxies=self.proxies
                         ).analyze_key_level()
                         print(f'已更新 {symbol} 的关键价位')
                         if 0 in list(
@@ -532,96 +649,99 @@ class MarketMonitor:
                 time.sleep(60)  # 出错后等待1分钟再试
 
     def _analysis_loop(self):
-        """改进后的分析循环，支持多时间周期"""
+        """改进的分析循环，包含形态分析和主要币种定期报告"""
         while self.running.is_set():
             try:
                 current_time = datetime.now()
                 batch_signals = []
+                
+                # 检查主要币种的每小时分析
+                for symbol in self.major_coins:
+                    last_analysis = self.last_major_analysis_time[symbol]
+                    if (current_time - last_analysis).total_seconds() >= 3600:  # 一小时
+                        analysis_message = self._analyze_major_coin(symbol)
+                        if analysis_message and self.telegram:
+                            self.telegram.send_message(analysis_message)
+                        self.last_major_analysis_time[symbol] = current_time
+                
+                # 处理所有币种的5分钟扫描
                 for symbol in self.symbols:
-
-                    # 获取各个时间周期的K线数据
+                    # 获取K线数据
                     kline_data_4h = []
                     kline_data_1h = []
                     kline_data_15m = []
-
-                    # 获取4小时数据
-                    klines_4h = DataFetcher.get_kline_data(
-                        symbol.upper(), '4h', 15
-                    )
-                    for _, row in klines_4h.iterrows():
-                        kline_data_4h.append(self._format_kline_data(row))
-
-                    # 获取1小时数据
-                    klines_1h = DataFetcher.get_kline_data(
-                        symbol.upper(), '1h', 15
-                    )
-                    for _, row in klines_1h.iterrows():
-                        kline_data_1h.append(self._format_kline_data(row))
-
+                    
+                    # 获取各时间周期数据
+                    klines_4h = DataFetcher.get_kline_data(symbol.upper(), '4h', 15, proxies=self.proxies)
+                    klines_1h = DataFetcher.get_kline_data(symbol.upper(), '1h', 15, proxies=self.proxies)
+                    klines_15m = DataFetcher.get_kline_data(symbol.upper(), '15m', 15, proxies=self.proxies)
+                    
+                    # 格式化数据
+                    for df in [(klines_4h, kline_data_4h), 
+                             (klines_1h, kline_data_1h), 
+                             (klines_15m, kline_data_15m)]:
+                        for _, row in df[0].iterrows():
+                            df[1].append(self._format_kline_data(row))
+                    
                     current_price = float(klines_1h['Close'].iloc[-1])
-                    # 获取15分钟数据
-                    klines_15m = DataFetcher.get_kline_data(
-                        symbol.upper(), '15m', 15
-                    )
-                    for _, row in klines_15m.iterrows():
-                        kline_data_15m.append(self._format_kline_data(row))
-
+                    
                     # 准备成交量数据
                     volume_data = self._prepare_volume_data(symbol)
-
-                    if not all(
-                        [
-                            kline_data_4h,
-                            kline_data_1h,
-                            kline_data_15m,
-                            volume_data,
-                        ]
-                    ):
+                    
+                    if not all([kline_data_4h, kline_data_1h, kline_data_15m, volume_data]):
                         continue
-
-                    # 计算指标
+                    
+                    # 计算技术指标
                     indicators = self.technical_analyzer.calculate_indicators(
                         kline_data_4h,
                         kline_data_1h,
                         kline_data_15m,
                     )
-
-                    # 生成信号
+                    
+                    # 添加形态分析
+                    pattern_analysis = self._analyze_patterns(klines_1h)
+                    
+                    # 生成交易信号
                     signals = self.technical_analyzer.generate_trading_signals(
                         indicators=indicators,
                         price=current_price,
                         key_levels=self.key_levels.get(symbol, {}),
                         volume_data=volume_data,
                     )
-                    # 处理信号
+                    
+                    # 根据形态分析调整信号
                     for signal in signals:
-                        if signal['type'] in [
-                            'buy',
-                            'sell',
-                            'strong_buy',
-                            'strong_sell',
-                        ]:
-                            batch_signals.append(
-                                {
-                                    'symbol': symbol,
-                                    'price': current_price,
-                                    'signal_type': signal['type'],
-                                    'score': signal['score'],
-                                    'technical_score': signal[
-                                        'technical_score'
-                                    ],
-                                    'trend_alignment': signal.get(
-                                        'trend_alignment', '未知'
-                                    ),
-                                    'volume_data': volume_data,
-                                    'risk_level': signal.get(
-                                        'risk_level', 'medium'
-                                    ),
-                                    'reason': signal.get('reason', ''),
-                                }
-                            )
-
-                    # Console输出
+                        if pattern_analysis:
+                            # 根据形态可靠度调整信号分数
+                            reliable_patterns = sum(1 for _, pattern in pattern_analysis['candlestick_patterns'].items()
+                                                if pattern['category'].reliability >= 4 and any(pattern['signal'] != 0))
+                            if reliable_patterns >= 2:
+                                signal['score'] *= 1.2  # 提高信号分数
+                            
+                            # 添加形态信息到信号原因中
+                            pattern_reasons = []
+                            for pattern_name, pattern_data in pattern_analysis['candlestick_patterns'].items():
+                                if any(pattern_data['signal'] != 0) and pattern_data['category'].reliability >= 4:
+                                    pattern_reasons.append(f"{pattern_data['category'].name}")
+                            
+                            if pattern_reasons:
+                                signal['reason'] = f"{signal.get('reason', '')}, 形态:{','.join(pattern_reasons)}"
+                        
+                        if signal['type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']:
+                            batch_signals.append({
+                                'symbol': symbol,
+                                'price': current_price,
+                                'signal_type': signal['type'],
+                                'score': signal['score'],
+                                'technical_score': signal['technical_score'],
+                                'trend_alignment': signal.get('trend_alignment', '未知'),
+                                'volume_data': volume_data,
+                                'risk_level': signal.get('risk_level', 'medium'),
+                                'reason': signal.get('reason', ''),
+                                'patterns': pattern_reasons if pattern_analysis else []
+                            })
+                    
+                    # 输出信号
                     if signals:
                         self._output_signals(
                             symbol,
@@ -630,38 +750,25 @@ class MarketMonitor:
                             current_price,
                             volume_data,
                         )
-
-                    # # 监控异常波动
-                    # self._monitor_abnormal_movements(
-                    #     symbol, indicators, volume_data
-                    # )
-
-                # if self.telegram:
-                #     self.telegram.send_alert_message()
-
+                
                 # 发送批量信号
                 if batch_signals and self.telegram:
                     self._send_batch_telegram_alerts(batch_signals)
-
+                
                 time.sleep(300)  # 5分钟检查一次
-
+                
             except Exception as e:
                 print(f'分析过程出错: {e}')
                 time.sleep(0.1)
 
     def _send_batch_telegram_alerts(self, batch_signals: List[Dict]):
-        """发送批量Telegram通知，支持多时间周期信息"""
+        """改进的批量信号推送，包含形态分析信息"""
         if not self.telegram:
             return
-
+        
         for signal in batch_signals:
-            if signal['signal_type'] in [
-                'buy',
-                'sell',
-                'strong_buy',
-                'strong_sell',
-            ]:
-                # 构建更详细的消息
+            if signal['signal_type'] in ['buy', 'sell', 'strong_buy', 'strong_sell']:
+                # 构建详细消息
                 technical_scores = signal.get('technical_score', {})
                 scores_text = []
                 if technical_scores:
@@ -670,24 +777,26 @@ class MarketMonitor:
                     if '1h' in technical_scores:
                         scores_text.append(f"1h:{technical_scores['1h']:.1f}")
                     if '15m' in technical_scores:
-                        scores_text.append(
-                            f"15m:{technical_scores['15m']:.1f}"
-                        )
-
-                trend_alignment = signal.get('trend_alignment', '')
-
+                        scores_text.append(f"15m:{technical_scores['15m']:.1f}")
+                
+                # 添加形态信息
+                patterns_text = ""
+                if signal.get('patterns'):
+                    patterns_text = f"\n📊 关键形态: {', '.join(signal['patterns'])}"
+                
                 message = self.telegram.format_signal_message(
                     symbol=signal['symbol'],
                     signal_type=signal['signal_type'],
                     current_price=signal['price'],
                     signal_score=signal['score'],
                     technical_scores=', '.join(scores_text),
-                    trend_alignment=trend_alignment,
+                    trend_alignment=signal.get('trend_alignment', ''),
                     volume_data=signal['volume_data'],
                     risk_level=signal['risk_level'],
                     reason=signal['reason'],
+                    additional_info=patterns_text
                 )
-
+                
                 self.telegram.send_message(message)
 
     def _format_kline_data(self, row) -> Dict:

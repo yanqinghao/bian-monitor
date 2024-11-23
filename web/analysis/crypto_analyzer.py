@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 class CryptoAnalyzer:
-    def __init__(self, symbol):
+    def __init__(self, symbol, proxies=None):
         self.symbol = symbol
         self.timeframes = {
             '15m': {'days': 7, 'label': '15分钟'},
@@ -17,12 +17,13 @@ class CryptoAnalyzer:
             '1d': {'days': 90, 'label': '日线'},
         }
         self.data = {}
+        self.proxies = proxies
 
     def analyze_key_level(self):
         """执行完整分析并生成指定格式的JSON数据"""
         try:
             # 获取数据
-            df_1h = DataFetcher.get_kline_data(self.symbol, '1h', 15)
+            df_1h = DataFetcher.get_kline_data(self.symbol, '1h', 15, proxies=self.proxies)
             current_price = df_1h['Close'].iloc[-1]
 
             # 计算关键价位
@@ -45,7 +46,7 @@ class CryptoAnalyzer:
             # 获取数据
             for interval, info in self.timeframes.items():
                 self.data[interval] = DataFetcher.get_kline_data(
-                    self.symbol, interval, info['days']
+                    self.symbol, interval, info['days'], proxies=self.proxies
                 )
 
             # 分析4小时数据作为主要参考
