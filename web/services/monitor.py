@@ -92,7 +92,7 @@ class MarketMonitor:
         try:
             print('正在更新监控列表...')
             top_symbols = self.scanner.get_top_symbols(
-                top_n=2, proxies=self.proxies
+                top_n=20, proxies=self.proxies
             )
 
             all_symbols = set()
