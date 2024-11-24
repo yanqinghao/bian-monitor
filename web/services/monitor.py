@@ -454,9 +454,6 @@ class MarketMonitor:
                 patterns_1h=patterns_1h,
                 sr_levels=patterns_1h['support_resistance'],  # 使用1小时周期的支撑阻力位
             )
-            import pdb
-
-            pdb.set_trace()
 
             # 添加交易建议
             message += '\n💡 交易建议:\n'
@@ -552,10 +549,6 @@ class MarketMonitor:
                     if r > current_price
                 ]
             )
-
-            import pdb
-
-            pdb.set_trace()
 
             # 根据市场周期和趋势确定方向
             if market_analysis:
