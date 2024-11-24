@@ -82,58 +82,94 @@ class EnhancedMarketAnalyzer:
         self, df: pd.DataFrame, ma_data: Dict[int, float]
     ) -> MarketCycle:
         """
-        判断当前市场周期
-
-        规则:
-        1. 多头排列（短期均线>中期均线>长期均线）且强势上涨 = 牛市
-        2. 空头排列（短期均线<中期均线<长期均线）且持续下跌 = 熊市
-        3. 均线交织且价格在一定范围内波动 = 震荡
-        4. 突破前期高点且成交量放大 = 牛市突破
-        5. 跌破关键支撑且成交量放大 = 熊市崩溃
+        判断当前市场周期，修复判断逻辑
         """
-        current_price = df['Close'].iloc[-1]
-        ma20, ma60, ma120 = [ma_data[p] for p in self.cycle_ma_periods]
+        try:
+            # 获取价格数据
+            current_price = df['Close'].iloc[-1]
+            ma20, ma60, ma120 = [ma_data[p] for p in self.cycle_ma_periods]
 
-        # 计算价格波动
-        volatility = df['Close'].pct_change().std() * np.sqrt(252)
-        price_range = (df['High'].max() - df['Low'].min()) / df['Low'].min()
+            # 1. 价格趋势分析
+            price_change_20d = (current_price - df['Close'].iloc[-20]) / df[
+                'Close'
+            ].iloc[-20]
+            price_change_60d = (
+                (current_price - df['Close'].iloc[-60]) / df['Close'].iloc[-60]
+                if len(df) >= 60
+                else price_change_20d
+            )
 
-        # 判断市场特征
-        if (
-            ma20 > ma60 > ma120
-            and current_price > ma20
-            and volatility < self.breakout_threshold
-        ):
-            # 检查是否是突破性牛市
+            # 2. 均线趋势分析
+            ma_bullish = ma20 > ma60  # 短期均线在长期均线上方
+            price_above_ma = current_price > ma20  # 价格在短期均线上方
+
+            # 3. 创新高分析
+            recent_high = df['High'].rolling(window=20).max().iloc[-1]
+            is_near_high = current_price >= recent_high * 0.95  # 价格接近最近高点的95%
+
+            # 4. 成交量分析
+            volume_ma = df['Volume'].rolling(window=20).mean().iloc[-1]
+            recent_volume = df['Volume'].iloc[-5:].mean()
+            volume_active = recent_volume > volume_ma
+
+            # 牛市判断标准：
+            # 1. 20日涨幅显著为正
+            # 2. 均线呈多头排列
+            # 3. 价格在均线上方
+            # 4. 接近新高
+            # 5. 成交量活跃
             if (
-                current_price
-                > df['High'].rolling(window=60).max().shift(1).iloc[-1]
-                and df['Volume'].iloc[-1]
-                > df['Volume'].rolling(window=20).mean().iloc[-1] * 1.5
+                price_change_20d > 0.05
+                and ma_bullish  # 20日涨幅超过5%
+                and price_above_ma
+                and is_near_high
+                and volume_active
             ):
-                return MarketCycle.BULL_BREAKOUT
-            return MarketCycle.BULL
+                if current_price > recent_high and volume_active:
+                    return MarketCycle.BULL_BREAKOUT
+                return MarketCycle.BULL
 
-        elif (
-            ma20 < ma60 < ma120
-            and current_price < ma20
-            and volatility < self.breakout_threshold
-        ):
-            # 检查是否是崩溃性熊市
+            # 熊市判断标准：
+            # 1. 20日跌幅显著为负
+            # 2. 均线呈空头排列
+            # 3. 价格在均线下方
+            # 4. 远离近期高点
             if (
-                current_price
-                < df['Low'].rolling(window=60).min().shift(1).iloc[-1]
-                and df['Volume'].iloc[-1]
-                > df['Volume'].rolling(window=20).mean().iloc[-1] * 1.5
+                price_change_20d < -0.05
+                and not ma_bullish  # 20日跌幅超过5%
+                and not price_above_ma
+                and not is_near_high
             ):
-                return MarketCycle.BEAR_BREAKDOWN
-            return MarketCycle.BEAR
+                return MarketCycle.BEAR
 
-        elif price_range < self.consolidation_threshold:
+            # 震荡市判断标准：
+            # 1. 价格波动在一定范围内
+            # 2. 没有明显趋势
+            volatility = df['Close'].pct_change().std() * np.sqrt(252)
+            if (
+                abs(price_change_20d) < 0.03
+                and volatility < self.consolidation_threshold
+            ):
+                return MarketCycle.CONSOLIDATION
+
+            # 默认判断：
+            # 如果价格在均线上方且走势向好，倾向判断为牛市
+            if price_above_ma and price_change_20d > 0:
+                return MarketCycle.BULL
+            # 如果以上都不满足，但仍在上升趋势中，判断为牛市
+            elif price_change_60d > 0.1:  # 60日涨幅超过10%
+                return MarketCycle.BULL
+            # 其他情况判断为震荡
             return MarketCycle.CONSOLIDATION
 
-        # 默认返回震荡
-        return MarketCycle.CONSOLIDATION
+        except Exception as e:
+            print(f'市场周期判断出错: {e}')
+            # 发生错误时，如果价格在上涨，倾向判断为牛市
+            return (
+                MarketCycle.BULL
+                if price_change_20d > 0
+                else MarketCycle.CONSOLIDATION
+            )
 
     def _identify_key_levels(
         self, df: pd.DataFrame, current_price: float

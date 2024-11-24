@@ -92,7 +92,7 @@ class MarketMonitor:
         try:
             print('正在更新监控列表...')
             top_symbols = self.scanner.get_top_symbols(
-                top_n=20, proxies=self.proxies
+                top_n=2, proxies=self.proxies
             )
 
             all_symbols = set()
@@ -446,6 +446,18 @@ class MarketMonitor:
                             f"• 当前形态: {', '.join(short_term_patterns)}\n"
                         )
 
+            # 在添加交易建议之前,计算入场点位
+            entry_points = self._calculate_entry_points(
+                current_price=current_price,
+                market_analysis=market_analysis,
+                patterns_4h=patterns_4h,
+                patterns_1h=patterns_1h,
+                sr_levels=patterns_1h['support_resistance'],  # 使用1小时周期的支撑阻力位
+            )
+            import pdb
+
+            pdb.set_trace()
+
             # 添加交易建议
             message += '\n💡 交易建议:\n'
 
@@ -464,6 +476,16 @@ class MarketMonitor:
                 )
                 message += cycle_advice
 
+                # 添加入场点位建议
+                if entry_points:
+                    message += '\n📍 入场建议:\n'
+                    if entry_points.get('entry', []):
+                        message += f"• 建议入场区间: {' - '.join([f'{p:.2f}' for p in entry_points['entry']])}\n"
+                    if entry_points.get('stop_loss'):
+                        message += f"• 建议止损: {entry_points['stop_loss']:.2f}\n"
+                    if entry_points.get('take_profit', []):
+                        message += f"• 目标位: {' -> '.join([f'{p:.2f}' for p in entry_points['take_profit']])}\n"
+
                 # 添加风险提示
                 risk_warning = self._generate_risk_warning(
                     market_analysis, current_price
@@ -471,19 +493,27 @@ class MarketMonitor:
                 if risk_warning:
                     message += f'\n⚠️ 风险提示:\n{risk_warning}'
             else:
-                # 如果没有市场周期分析，使用简单的趋势分析
+                # 如果没有市场周期分析,使用简单的趋势分析
                 if (
                     patterns_4h['trend_strength'] > 0.5
                     and patterns_1h['trend_strength'] > 0.3
                 ):
-                    message += '• 建议做多，注意设置止损\n'
+                    message += '• 建议做多,注意设置止损\n'
+                    if entry_points:
+                        message += self._format_entry_advice(
+                            entry_points, 'long'
+                        )
                 elif (
                     patterns_4h['trend_strength'] < -0.5
                     and patterns_1h['trend_strength'] < -0.3
                 ):
-                    message += '• 建议做空，注意设置止损\n'
+                    message += '• 建议做空,注意设置止损\n'
+                    if entry_points:
+                        message += self._format_entry_advice(
+                            entry_points, 'short'
+                        )
                 else:
-                    message += '• 建议观望，等待更清晰的信号\n'
+                    message += '• 建议观望,等待更清晰的信号\n'
 
             return message
 
@@ -493,6 +523,169 @@ class MarketMonitor:
 
             traceback.print_exc()
             return ''
+
+    def _calculate_entry_points(
+        self,
+        current_price: float,
+        market_analysis: Dict,
+        patterns_4h: Dict,
+        patterns_1h: Dict,
+        sr_levels: Dict,
+    ) -> Dict:
+        """计算建议的入场点位、止损和目标位"""
+        entry_points = {'entry': [], 'stop_loss': None, 'take_profit': []}
+
+        try:
+            # 获取最近的支撑位和阻力位
+            supports = sorted(
+                [
+                    s
+                    for s in sr_levels.get('supports', [])
+                    if s < current_price
+                ],
+                reverse=True,
+            )
+            resistances = sorted(
+                [
+                    r
+                    for r in sr_levels.get('resistances', [])
+                    if r > current_price
+                ]
+            )
+
+            import pdb
+
+            pdb.set_trace()
+
+            # 根据市场周期和趋势确定方向
+            if market_analysis:
+                cycle = market_analysis['market_cycle']
+                trend_strength = market_analysis['trend_strength']
+
+                # 多头入场点位计算
+                if (
+                    cycle in [MarketCycle.BULL, MarketCycle.BULL_BREAKOUT]
+                    and trend_strength > 0.3
+                ) or (
+                    patterns_4h['trend_strength'] > 0.5
+                    and patterns_1h['trend_strength'] > 0.3
+                ):
+                    # 计算入场区间
+                    if supports:
+                        # 支撑位上方1-2%
+                        entry_low = supports[0] * 1.01
+                        entry_high = supports[0] * 1.02
+                        entry_points['entry'] = [entry_low, entry_high]
+                        # 支撑位下方1-2%设置止损
+                        entry_points['stop_loss'] = supports[0] * 0.98
+
+                    # 设置目标位
+                    if resistances:
+                        # 第一目标位
+                        entry_points['take_profit'].append(resistances[0])
+                        # 第二目标位(阻力位上方3%)
+                        if len(resistances) > 1:
+                            entry_points['take_profit'].append(resistances[1])
+                        else:
+                            entry_points['take_profit'].append(
+                                resistances[0] * 1.03
+                            )
+
+                # 空头入场点位计算
+                elif (
+                    cycle in [MarketCycle.BEAR, MarketCycle.BEAR_BREAKDOWN]
+                    and trend_strength < -0.3
+                ) or (
+                    patterns_4h['trend_strength'] < -0.5
+                    and patterns_1h['trend_strength'] < -0.3
+                ):
+                    if resistances:
+                        # 阻力位下方1-2%
+                        entry_high = resistances[0] * 0.99
+                        entry_low = resistances[0] * 0.98
+                        entry_points['entry'] = [entry_low, entry_high]
+                        # 阻力位上方2%设置止损
+                        entry_points['stop_loss'] = resistances[0] * 1.02
+
+                    # 设置目标位
+                    if supports:
+                        # 第一目标位
+                        entry_points['take_profit'].append(supports[0])
+                        # 第二目标位(支撑位下方3%)
+                        if len(supports) > 1:
+                            entry_points['take_profit'].append(supports[1])
+                        else:
+                            entry_points['take_profit'].append(
+                                supports[0] * 0.97
+                            )
+
+                # 根据市场波动调整止损
+                if entry_points['stop_loss']:
+                    volatility = market_analysis.get('volatility', {}).get(
+                        'atr_percent', 2
+                    )
+                    if volatility > 3:  # 高波动市场
+                        entry_points['stop_loss'] = self._adjust_stop_loss(
+                            entry_points['stop_loss'],
+                            current_price,
+                            volatility,
+                            cycle,
+                        )
+
+        except Exception as e:
+            print(f'计算入场点位失败: {e}')
+
+        return entry_points
+
+    def _adjust_stop_loss(
+        self,
+        stop_loss: float,
+        current_price: float,
+        volatility: float,
+        market_cycle: MarketCycle,
+    ) -> float:
+        """根据波动率和市场周期调整止损位"""
+        # 基础止损率
+        base_risk = 0.02  # 2%
+
+        # 根据波动率调整
+        if volatility > 5:  # 高波动
+            risk = base_risk * 1.5
+        elif volatility > 3:  # 中等波动
+            risk = base_risk * 1.2
+        else:  # 低波动
+            risk = base_risk
+
+        # 根据市场周期进一步调整
+        if market_cycle in [
+            MarketCycle.BULL_BREAKOUT,
+            MarketCycle.BEAR_BREAKDOWN,
+        ]:
+            risk *= 1.2  # 突破/跌破时设置更宽松的止损
+
+        # 计算新的止损位
+        if stop_loss > current_price:  # 做空止损
+            return stop_loss * (1 + risk)
+        else:  # 做多止损
+            return stop_loss * (1 - risk)
+
+    def _format_entry_advice(self, entry_points: Dict, direction: str) -> str:
+        """格式化入场建议"""
+        advice = ''
+        if entry_points.get('entry'):
+            advice += f"• 建议{direction=='long' and '买入' or '卖出'}区间: "
+            advice += (
+                f"{' - '.join([f'{p:.2f}' for p in entry_points['entry']])}\n"
+            )
+
+        if entry_points.get('stop_loss'):
+            advice += f"• 建议止损位: {entry_points['stop_loss']:.2f}\n"
+
+        if entry_points.get('take_profit'):
+            targets = entry_points['take_profit']
+            advice += f"• 目标位: {' -> '.join([f'{p:.2f}' for p in targets])}\n"
+
+        return advice
 
     def _generate_risk_warning(
         self, market_analysis: Dict, current_price: float
@@ -1092,10 +1285,10 @@ class MarketMonitor:
                                 ]
                             )
 
-                        # 监控异常波动
-                        self._monitor_abnormal_movements(
-                            symbol, indicators, volume_data
-                        )
+                        # # 监控异常波动
+                        # self._monitor_abnormal_movements(
+                        #     symbol, indicators, volume_data
+                        # )
 
                     except Exception as e:
                         print(f'处理{symbol}数据时出错: {e}')

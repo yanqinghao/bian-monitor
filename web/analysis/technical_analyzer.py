@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 import pandas as pd
 import talib
 from analysis.indicators import TechnicalIndicators
@@ -1008,78 +1008,88 @@ class TechnicalAnalyzer:
 
     def _assess_risk_level(
         self,
-        technical_score: float,
+        base_score: float,
         sr_score: float,
         volume_score: float,
         pattern_score: float = 0,
-    ) -> str:
+        market_analysis: Optional[Dict] = None,  # 添加市场分析参数
+    ) -> Dict[str, Union[str, float, List[str]]]:
         """
         评估交易风险等级
 
         Args:
-            technical_score: 技术分析得分 (0-100)
+            base_score: 基础技术得分 (0-100)
             sr_score: 支撑压力位得分 (0-100)
             volume_score: 成交量得分 (0-100)
             pattern_score: 形态分析得分 (0-100)
+            market_analysis: 市场分析结果(可选)
 
         Returns:
-            str: 'low', 'medium', 或 'high'
+            Dict: {
+                'level': str,  # 风险等级
+                'score': float,  # 风险分数
+                'factors': List[str],  # 风险因素
+                'recommendations': List[str]  # 风险管理建议
+            }
         """
         try:
-            # 基础风险评分 (0-100, 越高风险越大)
-            risk_score = 0
+            risk_factors = []
+            risk_score = 50  # 基础风险分
 
-            # 1. 技术面风险 (权重 40%)
-            technical_risk = 100 - technical_score  # 技术得分越低风险越高
-            risk_score += technical_risk * 0.4
+            # 1. 技术面风险评估
+            technical_risk = self._evaluate_technical_risk(
+                base_score, sr_score, pattern_score
+            )
+            risk_score += technical_risk['score_impact']
+            risk_factors.extend(technical_risk['factors'])
 
-            # 2. 位置风险 (权重 30%)
-            position_risk = 100 - sr_score  # 远离支撑/接近阻力时风险更高
-            risk_score += position_risk * 0.3
+            # 2. 位置风险评估
+            position_risk = self._evaluate_position_risk(
+                sr_score, market_analysis
+            )
+            risk_score += position_risk['score_impact']
+            risk_factors.extend(position_risk['factors'])
 
-            # 3. 成交量风险 (权重 20%)
-            volume_risk = 0
-            if volume_score > 80:  # 成交量过大
-                volume_risk = 80
-            elif volume_score < 20:  # 成交量过小
-                volume_risk = 90
-            elif volume_score < 40:  # 成交量偏小
-                volume_risk = 60
-            risk_score += volume_risk * 0.2
+            # 3. 市场环境风险评估
+            market_risk = self._evaluate_market_risk(
+                volume_score, market_analysis
+            )
+            risk_score += market_risk['score_impact']
+            risk_factors.extend(market_risk['factors'])
 
-            # 4. 形态风险 (权重 10%)
-            pattern_risk = 0
-            if pattern_score > 0:  # 如果有形态分析
-                pattern_risk = 100 - pattern_score  # 形态可靠度越低风险越高
-                risk_score += pattern_risk * 0.1
-            else:  # 没有明确形态时略微提高风险
-                risk_score += 60 * 0.1
+            # 标准化风险分数到0-100
+            final_risk_score = max(0, min(100, risk_score))
 
-            # 5. 风险调整因素
-
-            # 5.1 位置和技术面的一致性
-            if abs(technical_risk - position_risk) > 50:  # 技术面和位置出现较大分歧
-                risk_score *= 1.1
-
-            # 5.2 成交量异常
-            if volume_risk > 70:  # 成交量异常时提高风险
-                risk_score *= 1.1
-
-            # 5.3 形态确认度
-            if pattern_score > 80:  # 有高度可靠的形态时可以降低风险
-                risk_score *= 0.9
-
-            # 6. 最终风险等级判定
-            if risk_score >= 70:
-                return 'high'
-            elif risk_score >= 40:
-                return 'medium'
+            # 确定风险等级
+            if final_risk_score >= 75:
+                risk_level = 'extreme'
+            elif final_risk_score >= 60:
+                risk_level = 'high'
+            elif final_risk_score >= 40:
+                risk_level = 'medium'
             else:
-                return 'low'
+                risk_level = 'low'
+
+            # 生成风险管理建议
+            recommendations = self._generate_risk_recommendations(
+                risk_level, risk_factors, market_analysis
+            )
+
+            return {
+                'level': risk_level,
+                'score': final_risk_score,
+                'factors': risk_factors,
+                'recommendations': recommendations,
+            }
 
         except Exception as e:
-            print(f'评估风险等级出错: {e}')
-            return 'high'  # 出错时返回高风险
+            print(f'风险评估失败: {e}')
+            return {
+                'level': 'high',
+                'score': 75,
+                'factors': ['风险评估过程出错'],
+                'recommendations': ['建议保持谨慎'],
+            }
 
     def _evaluate_technical_risk(
         self, base_score: float, sr_score: float, pattern_score: float
