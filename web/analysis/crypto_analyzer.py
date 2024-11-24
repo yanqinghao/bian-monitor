@@ -23,16 +23,36 @@ class CryptoAnalyzer:
         """执行完整分析并生成指定格式的JSON数据"""
         try:
             # 获取数据
-            df_1h = DataFetcher.get_kline_data(self.symbol, '1h', 15, proxies=self.proxies)
+            df_1h = DataFetcher.get_kline_data(
+                self.symbol, '1h', 15, proxies=self.proxies
+            )
             current_price = df_1h['Close'].iloc[-1]
 
             # 计算关键价位
-            key_levels = LevelsFinder.find_key_levels(df_1h, current_price)
+            key_levels_1h = LevelsFinder.find_key_levels(df_1h, current_price)
+
+            # 获取数据
+            df_4h = DataFetcher.get_kline_data(
+                self.symbol, '4h', 30, proxies=self.proxies
+            )
+
+            # 计算关键价位
+            key_levels_4h = LevelsFinder.find_key_levels(df_4h, current_price)
 
             # 构建最终JSON
             result = {
-                'resistances': [float(x) for x in key_levels['resistances']],
-                'supports': [float(x) for x in key_levels['supports']],
+                '1h': {
+                    'resistances': [
+                        float(x) for x in key_levels_1h['resistances']
+                    ],
+                    'supports': [float(x) for x in key_levels_1h['supports']],
+                },
+                '4h': {
+                    'resistances': [
+                        float(x) for x in key_levels_4h['resistances']
+                    ],
+                    'supports': [float(x) for x in key_levels_4h['supports']],
+                },
             }
 
             return result

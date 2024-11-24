@@ -4,6 +4,14 @@ from typing import Dict, List, Union
 from enum import Enum
 
 
+class MarketCycle(Enum):
+    BULL = '牛市'
+    BEAR = '熊市'
+    CONSOLIDATION = '震荡'
+    BULL_BREAKOUT = '牛市突破'
+    BEAR_BREAKDOWN = '熊市崩溃'
+
+
 class TrendType(Enum):
     BULLISH = '上涨'
     BEARISH = '下跌'
@@ -638,59 +646,59 @@ class EnhancedPatternDetection:
 
         return patterns
 
-    @staticmethod
-    def detect_support_resistance(
-        df: pd.DataFrame, window: int = 20, price_threshold: float = 0.02
-    ) -> Dict[str, List[float]]:
-        """
-        检测支撑位和压力位
+    # @staticmethod
+    # def detect_support_resistance(
+    #     df: pd.DataFrame, window: int = 20, price_threshold: float = 0.02
+    # ) -> Dict[str, List[float]]:
+    #     """
+    #     检测支撑位和压力位
 
-        参数:
-            window: 寻找局部极值的窗口大小
-            price_threshold: 价格聚类的阈值（百分比）
+    #     参数:
+    #         window: 寻找局部极值的窗口大小
+    #         price_threshold: 价格聚类的阈值（百分比）
 
-        返回:
-            包含支撑位和压力位的字典
-        """
-        support_levels = []
-        resistance_levels = []
-        prices = df['Close'].values
+    #     返回:
+    #         包含支撑位和压力位的字典
+    #     """
+    #     support_levels = []
+    #     resistance_levels = []
+    #     prices = df['Close'].values
 
-        # 寻找局部最小值作为潜在支撑位
-        for i in range(window, len(prices) - window):
-            price_window = prices[i - window : i + window]
-            current_price = prices[i]
+    #     # 寻找局部最小值作为潜在支撑位
+    #     for i in range(window, len(prices) - window):
+    #         price_window = prices[i - window : i + window]
+    #         current_price = prices[i]
 
-            # 判断是否为局部最小值
-            if current_price == min(price_window):
-                # 检查是否与已有支撑位接近
-                if not any(
-                    abs(level - current_price) / current_price
-                    < price_threshold
-                    for level in support_levels
-                ):
-                    support_levels.append(current_price)
+    #         # 判断是否为局部最小值
+    #         if current_price == min(price_window):
+    #             # 检查是否与已有支撑位接近
+    #             if not any(
+    #                 abs(level - current_price) / current_price
+    #                 < price_threshold
+    #                 for level in support_levels
+    #             ):
+    #                 support_levels.append(current_price)
 
-        # 寻找局部最大值作为潜在压力位
-        for i in range(window, len(prices) - window):
-            price_window = prices[i - window : i + window]
-            current_price = prices[i]
+    #     # 寻找局部最大值作为潜在压力位
+    #     for i in range(window, len(prices) - window):
+    #         price_window = prices[i - window : i + window]
+    #         current_price = prices[i]
 
-            # 判断是否为局部最大值
-            if current_price == max(price_window):
-                # 检查是否与已有压力位接近
-                if not any(
-                    abs(level - current_price) / current_price
-                    < price_threshold
-                    for level in resistance_levels
-                ):
-                    resistance_levels.append(current_price)
+    #         # 判断是否为局部最大值
+    #         if current_price == max(price_window):
+    #             # 检查是否与已有压力位接近
+    #             if not any(
+    #                 abs(level - current_price) / current_price
+    #                 < price_threshold
+    #                 for level in resistance_levels
+    #             ):
+    #                 resistance_levels.append(current_price)
 
-        # 排序并返回结果
-        return {
-            'support_levels': sorted(support_levels),
-            'resistance_levels': sorted(resistance_levels),
-        }
+    #     # 排序并返回结果
+    #     return {
+    #         'support_levels': sorted(support_levels),
+    #         'resistance_levels': sorted(resistance_levels),
+    #     }
 
     @staticmethod
     def detect_trend_lines(

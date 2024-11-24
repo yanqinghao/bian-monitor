@@ -126,8 +126,25 @@ class LevelsFinder:
                 return round(price, 2)
             elif price >= 1:
                 return round(price, 3)
+            elif price >= 0.0001:
+                return round(price, 8)
             else:
-                return round(price, 4)
+                # 对于非常小的数字（如SHIB），计算需要的小数位数
+                str_price = f'{price:.20f}'  # 先转换为字符串，保留足够多的小数位
+                # 找到第一个非零数字的位置
+                first_non_zero = 0
+                for i, char in enumerate(str_price):
+                    if char == '0':
+                        continue
+                    if char == '.':
+                        continue
+                    first_non_zero = i
+                    break
+                # 在第一个非零数字后保留4位有效数字
+                decimal_places = (
+                    first_non_zero + 5 if first_non_zero > 5 else 10
+                )
+                return round(price, decimal_places)
 
         # 返回前3个最佳水平
         return {
